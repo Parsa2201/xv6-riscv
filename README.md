@@ -1,5 +1,5 @@
-# XV6-RISKV
-This is a distribution of the original XV6-RISKV by Parsa Salamatipour
+# XV6-RISCV
+This is a distribution of the original XV6-RISCV by Parsa Salamatipour
 The features are listed below:
 
 # Features
