@@ -30,8 +30,7 @@ struct spinlock wait_lock;
 
 // stores every user-trap information and its grand-parents
 // stores at most 4 grand-parents for every report
-struct
-{
+struct {
   struct report reports[MAX_REPORT_BUFFER_SIZE];
   int numberOfReports;
   int writeIndex;       // Circle loop
