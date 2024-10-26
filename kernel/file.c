@@ -130,7 +130,7 @@ fileread(struct file *f, uint64 addr, int n)
 }
 
 // Read from file f.
-// addr is a user virtual address.
+// addr is a kernel virtual address.
 int
 fileread_kernel(struct file *f, uint64 addr, int n)
 {
