@@ -751,6 +751,10 @@ int is_in(int value, int list[], int len)
   return 0;
 }
 
+// returns traps that have been made by a process or its grand-children.
+// it works only if the child is in depth of 4
+// returns at most 10 traps
+// Returns 0 on success, -1 on error.
 int
 report_traps(struct report_traps *rt_result)
 {
