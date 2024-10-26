@@ -833,6 +833,8 @@ add_trap(int scause, int sepc, int stval)
   // release(&p->lock);
 }
 
+// loads last 10 traps from reports.bin into manim memory
+// Returns 0 on success, -1 on error.
 int
 load_traps()
 {
