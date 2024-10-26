@@ -113,16 +113,14 @@ struct proc_info {
   enum procstate state;
 };
 
-struct child_processes
-{
+struct child_processes {
   int count;
   struct proc_info processes[NPROC];
 };
 
 # define MAX_REPORT_BUFFER_SIZE 10
 
-struct report
-{
+struct report {
   char pname[16];       // Process Name
   int pid;              // Process ID
   uint64 scause;        // Supervisor Trap Cause
@@ -132,8 +130,7 @@ struct report
   int parents_count;    // Number of grand parents
 };
 
-struct report_traps
-{
+struct report_traps {
   struct report reports[MAX_REPORT_BUFFER_SIZE];
   int count;
 };
