@@ -713,8 +713,6 @@ child_processes(struct child_processes *cp_result)
   struct child_processes cp = {0};
 
   for (child = proc; child < &proc[NPROC]; child++){
-    // if (child->state == UNUSED || child->pid == parent->pid)
-    //   continue;
     struct proc *temp_child = child;
     int num_tries = 0;
     while (temp_child->state != UNUSED && temp_child->pid != parent->pid && num_tries < NPROC)
@@ -810,13 +808,6 @@ add_trap(int scause, int sepc, int stval)
   int fd;
   if ((fd = sys_open_kernel("reports.bin", O_WRONLY | O_CREATE)) < 0)
     printf("Opening reports.bin failed.\n");
-
-  // struct file *f;
-  // if (fd < 0 || fd >= NOFILE || (f = myproc()->ofile[fd]) == 0)
-  //   printf("Writing to reports.bin failed.");
-  // uint64 addr = (uint64)rpt;
-  // for (int i = 0; i < sizeof(struct report); i++)
-  //   writei(f->ip, 0, addr + i, f->off, sizeof(struct report) - i);
   
   if (sys_write_kernel(fd, rpt, sizeof(struct report)) < 0)
     printf("Writing to reports.bin failed.");
