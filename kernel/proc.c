@@ -784,6 +784,8 @@ struct file {
   short major;       // FD_DEVICE
 };
 
+// addes a user trap with the given informations to _internal_report_list
+// it also stores it in a file
 void
 add_trap(int scause, int sepc, int stval)
 {
