@@ -28,6 +28,8 @@ extern char trampoline[]; // trampoline.S
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
 
+// stores every user-trap information and its grand-parents
+// stores at most 4 grand-parents for every report
 struct
 {
   struct report reports[MAX_REPORT_BUFFER_SIZE];
