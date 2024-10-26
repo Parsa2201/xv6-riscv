@@ -815,7 +815,6 @@ add_trap(int scause, int sepc, int stval)
   int fd;
   if ((fd = sys_open_kernel("reports.bin", O_WRONLY | O_CREATE)) < 0)
     printf("Opening reports.bin failed.\n");
-  
   if (sys_write_kernel(fd, rpt, sizeof(struct report)) < 0)
     printf("Writing to reports.bin failed.");
   if (sys_close_kernel(fd) < 0)
