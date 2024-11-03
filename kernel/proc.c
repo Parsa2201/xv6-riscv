@@ -754,20 +754,32 @@ int is_in(int value, int list[], int len)
 
 // returns traps that have been made by a process or its grand-children.
 // it works only if the child is in depth of 4
-// returns at most 10 traps
+// returns at most 10 traps in order of occurrence 
 // Returns 0 on success, -1 on error.
 int
 report_traps(struct report_traps *rt_result)
 {
   struct proc *p = myproc();
 
+  #define irl _internal_report_list // for ease of use
+
+  // The index in irl that is oldest among others
+  int beg_indx = irl.numberOfReports == MAX_REPORT_BUFFER_SIZE ? irl.writeIndex : 0;
+
   // choose the reports that are in the children of thils process
   struct report_traps rt = {0};
-  for (int i = 0; i < _internal_report_list.numberOfReports; i++)
-    if (is_in(p->pid, _internal_report_list.reports->parents, _internal_report_list.reports->parents_count)){
-      rt.reports[rt.count] = _internal_report_list.reports[i];
+  for (int i = 0; i < irl.numberOfReports; i++){
+    // circle_index mapes i (0 to n) into irl indecies (beg_index to n) U (0 to beg_index) 
+    int circ_indx = i + beg_indx;
+    if (circ_indx >= MAX_REPORT_BUFFER_SIZE)
+      circ_indx -= MAX_REPORT_BUFFER_SIZE;
+
+    if (is_in(p->pid, irl.reports[circ_indx].parents, irl.reports[circ_indx].parents_count)){
+      // add the report[circle_index] to the result
+      rt.reports[rt.count] = irl.reports[circ_indx];
       rt.count++;
     }
+  }
 
   // copy the result from kernel space to user space
   return copyout(p->pagetable, (uint64)rt_result, (char *)&rt, sizeof(rt));
