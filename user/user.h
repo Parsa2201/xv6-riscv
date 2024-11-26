@@ -29,6 +29,7 @@ int uptime(void);
 int child_processes(struct child_processes *);
 int report_traps(struct report_traps *);
 int load_traps(void);
+int create_thread(uint *, void *(*)(void *arg), void *);
 
 // ulib.c
 int stat(const char*, struct stat*);
