@@ -39,3 +39,4 @@ entry("uptime");
 entry("child_processes");
 entry("report_traps");
 entry("load_traps");
+entry("create_thread");
