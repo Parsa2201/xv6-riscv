@@ -113,3 +113,15 @@ sys_load_traps(void)
 {
   return load_traps();
 }
+
+void
+sys_create_thread(void) 
+{
+  uint *thread_id;
+  void *(*function)(void *arg);
+  void *arg;
+  argaddr(0, (uint64 *)&thread_id);
+  argaddr(1, (uint64 *)&function);
+  argaddr(2, (uint64 *)&arg);
+  return create_thread(thread_id, function, arg);
+}
