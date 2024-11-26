@@ -898,3 +898,9 @@ load_traps()
 
   return 0;
 }
+
+int
+create_thread(uint *thread_id, void *(*function)(void *arg), void *arg)
+{
+  
+}
