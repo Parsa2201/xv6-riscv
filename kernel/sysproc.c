@@ -5,7 +5,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
-
+//#include <pthread.h>
 uint64
 sys_exit(void)
 {
@@ -114,7 +114,7 @@ sys_load_traps(void)
   return load_traps();
 }
 
-void
+uint64
 sys_create_thread(void) 
 {
   uint *thread_id;
@@ -124,4 +124,11 @@ sys_create_thread(void)
   argaddr(1, (uint64 *)&function);
   argaddr(2, (uint64 *)&arg);
   return create_thread(thread_id, function, arg);
+}
+uint64
+sys_join_thread(void) 
+{
+  uint *thread_id;
+  argaddr(0, (uint64 *)&thread_id);
+  return join_thread(thread_id);
 }

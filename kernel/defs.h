@@ -119,6 +119,7 @@ int             report_traps(struct report_traps *);
 void            add_trap(int, int, int);
 int             load_traps();
 int             create_thread(uint *, void *(*)(void *arg), void *);
+int             join_thread(uint *);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
