@@ -79,6 +79,20 @@ struct trapframe {
   /* 280 */ uint64 t6;
 };
 
+enum threadstate {
+  THREAD_FREE,
+  THREAD_RUNNABLE,
+  THREAD_RUNNING,
+  THREAD_JOINED,
+};
+
+struct thread {
+  enum threadstate state;
+  struct trapframe *trapframe;
+  uint id;
+  uint join;
+};
+
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 // Per-process state
@@ -104,6 +118,9 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  struct thread threads[MAX_THREAD];
+  struct thread *current_thread;
 };
 
 struct proc_info {
@@ -133,19 +150,4 @@ struct report {
 struct report_traps {
   struct report reports[MAX_REPORT_BUFFER_SIZE];
   int count;
-};
-
-#define MAX_THREAD 4
-enum threadstate {
-  THREAD_FREE,
-  THREAD_RUNNABLE,
-  THREAD_RUNNING,
-  THREAD_JOINED,
-};
-
-struct thread {
-  enum threadstate state;
-  struct trapframe *trapframe;
-  uint id;
-  uint join;
 };
