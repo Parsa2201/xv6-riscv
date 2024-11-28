@@ -917,17 +917,16 @@ allocthrid()
   return thrid;
 }
 
-
 // Returns 0 on success, -1 on error.
-int
-create_thread(uint *thread_id, void *(*function)(void *arg), void *arg)
-{
+int create_thread(uint *thread_id, void *(*function)(void *arg), void *arg) {
+  struct thread *t;
   struct proc *p = myproc();
 
   // in case something went wrong finding the current process;
   if (p == 0)
     panic("didn't find current process");
-
+    
+  // Use locks for synchronization to ensure mutual exclusion
   acquire(&p->lock);
 
   // each process has a maximum limit of creating threads
@@ -936,108 +935,92 @@ create_thread(uint *thread_id, void *(*function)(void *arg), void *arg)
     return -1;
   }
 
-  struct thread t;
-
-  // Give thread the nect available thread id
-  t.id = allocthrid();
-  copyout(p->pagetable, (uint64)thread_id, (char *)&t.id, sizeof(int));
-
-  t.state = THREAD_RUNNABLE;
-}
-int next_thread_id = 1;
-
-int create_thread(uint *thread_id, void *(*function)(void *arg), void *arg) {
-    struct thread *t;
-    struct proc *p = myproc();
-    
-    // Use locks for synchronization to ensure mutual exclusion
-    acquire(&p->lock);
-
-    // Search for a free slot for a new thread in the threads array
-    for (t = p->threads; t < &p->threads[MAX_THREAD]; t++) {
-        if (t->state == THREAD_FREE) {
-            goto found;
-        }
-    }
-    
-    // Release lock if no free space for a new thread is found
-    release(&p->lock);
-    return -1; // No space available for a new thread
+  // Search for a free slot for a new thread in the threads array
+  for (t = p->threads; t < &p->threads[MAX_THREAD]; t++) {
+      if (t->state == THREAD_FREE) {
+          goto found;
+      }
+  }
+  
+  // Release lock if no free space for a new thread is found
+  release(&p->lock);
+  return -1; // No space available for a new thread
 
 found:
-    // Mark the thread as runnable
-    t->state = THREAD_RUNNABLE;
-    
-    // Assign a unique thread ID
-    t->id = next_thread_id++;
-    
-    // Initialize the join variable
-    t->join = 0;
+  // Mark the thread as runnable
+  t->state = THREAD_RUNNABLE;
+  
+  // Assign a unique thread ID
+  t->id = allocthrid();
+  
+  // Initialize the join variable
+  t->join = 0;
 
-    // Allocate a trapframe for the thread
-    if ((t->trapframe = (struct trapframe *)kalloc()) == 0) {
-        t->state = THREAD_FREE;
-        release(&p->lock);
-        return -1; // Failed to allocate trapframe
-    }
+  // Allocate a trapframe for the thread
+  if ((t->trapframe = (struct trapframe *)kalloc()) == 0) {
+      t->state = THREAD_FREE;
+      release(&p->lock);
+      return -1; // Failed to allocate trapframe
+  }
 
-    // Allocate stack for the thread
-    uint64 stack = (uint64)kalloc();
-    if (stack == 0) {
-        kfree((void *)t->trapframe);
-        t->state = THREAD_FREE;
-        release(&p->lock);
-        return -1; // Failed to allocate stack
-    }
+  // Allocate stack for the thread
+  uint64 stack = (uint64)kalloc();
+  if (stack == 0) {
+      kfree((void *)t->trapframe);
+      t->state = THREAD_FREE;
+      release(&p->lock);
+      return -1; // Failed to allocate stack
+  }
 
-    // Initialize the trapframe with default values
-    memset(t->trapframe, 0, sizeof(*t->trapframe));
-    
-    // Set up the trapframe for the thread to execute the function
-    t->trapframe->epc = (uint64)function;   // Program Counter: function to execute
-    t->trapframe->sp = stack + PGSIZE;      // Stack Pointer: stack allocated for the thread  -- Not Sure about PGSIZE
-    t->trapframe->a0 = (uint64)arg;         // Argument for the function
+  // Initialize the trapframe with default values
+  memset(t->trapframe, 0, sizeof(*t->trapframe));
+  
+  // Set up the trapframe for the thread to execute the function
+  t->trapframe->epc = (uint64)function;   // Program Counter: function to execute
+  t->trapframe->sp = stack + PGSIZE;      // Stack Pointer: stack allocated for the thread  -- Not Sure about PGSIZE
+  t->trapframe->a0 = (uint64)arg;         // Argument for the function
 
-    // Set the thread's ID to the provided thread_id
-    copyout(parent->pagetable, (uint64)thread_id, (char *)&t->id, sizeof(t->id));
-    // Set the current thread to the newly created thread (if required)
-    p->current_thread = t;
+  // Set the thread's ID to the provided thread_id
+  copyout(p->pagetable, (uint64)thread_id, (char *)&t->id, sizeof(t->id));
+  // Set the current thread to the newly created thread (if required)
+  p->current_thread = t;
 
-    // Release the lock as the thread creation process is now complete
-    release(&p->lock);
-    return 0; // Success
+  // Release the lock as the thread creation process is now complete
+  release(&p->lock);
+  return 0; // Success
 }
+
 int join_thread(uint* thread_id) {
-    struct proc *p = myproc();
-    struct thread *t;
-    int found = 0;
+  struct proc *p = myproc();
+  struct thread *t;
+  int found = 0;
 
-    acquire(&p->lock);
+  acquire(&p->lock);
 
-    // Finding the thread with the given ID
-    for (t = p->threads; t < &p->threads[MAX_THREAD]; t++) {
-        if (t->id == *thread_id) {
-            found = 1;
-            break;
-        }
-    }
+  // Finding the thread with the given ID
+  for (t = p->threads; t < &p->threads[MAX_THREAD]; t++) {
+      if (t->id == *thread_id) {
+          found = 1;
+          break;
+      }
+  }
 
-    // If the thread is not found, return error
-    if (!found) {
-        release(&p->lock);
-        return -1; // No thread with this ID found
-    }
+  // If the thread is not found, return error
+  if (!found) {
+      release(&p->lock);
+      return -1; // No thread with this ID found
+  }
 
-    // Wait for the thread to finish
-    // while (t->state != THREAD_ZOMBIE) {
-    //     sleep(t, &p->lock);
-    // }
+  // Wait for the thread to finish
+  // while (t->state != THREAD_ZOMBIE) {
+  //     sleep(t, &p->lock);
+  // }
 
-    // Clean up resources used by the thread
-    kfree((void *)t->trapframe);
-    t->state = THREAD_FREE;
-    t->id = 0;
+  // Clean up resources used by the thread
+  kfree((void *)t->trapframe);
+  t->state = THREAD_FREE;
+  t->id = 0;
 
-    release(&p->lock);
-    return 0; // Success
+  release(&p->lock);
+  return 0; // Success
 }
