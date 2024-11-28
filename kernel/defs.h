@@ -118,7 +118,7 @@ int             child_processes(struct child_processes *);
 int             report_traps(struct report_traps *);
 void            add_trap(int, int, int);
 int             load_traps();
-int             create_thread(uint *, void *(*)(void *arg), void *);
+int             create_thread(uint *, void *(*)(void *arg), void *, void *, uint64);
 int             join_thread(uint *);
 
 // swtch.S

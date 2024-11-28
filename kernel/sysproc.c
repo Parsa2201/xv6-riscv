@@ -120,10 +120,15 @@ sys_create_thread(void)
   uint *thread_id;
   void *(*function)(void *arg);
   void *arg;
+  void *stack;
+  uint64 stack_size;
   argaddr(0, (uint64 *)&thread_id);
   argaddr(1, (uint64 *)&function);
   argaddr(2, (uint64 *)&arg);
-  return create_thread(thread_id, function, arg);
+  argaddr(3, (uint64 *)&stack);
+  argaddr(4, (uint64 *)&stack_size);
+
+  return create_thread(thread_id, function, arg, stack, stack_size);
 }
 uint64
 sys_join_thread(void) 
