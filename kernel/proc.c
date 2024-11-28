@@ -17,6 +17,10 @@ struct proc *initproc;
 int nextpid = 1;
 struct spinlock pid_lock;
 
+// Next thread id available
+int nextthrid = 1;
+struct spinlock thrid_lock;
+
 extern void forkret(void);
 static void freeproc(struct proc *p);
 
@@ -60,6 +64,7 @@ procinit(void)
   struct proc *p;
   
   initlock(&pid_lock, "nextpid");
+  initlock(&thrid_lock, "nextthrid");
   initlock(&wait_lock, "wait_lock");
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
@@ -900,7 +905,42 @@ load_traps()
 }
 
 int
+allocthrid()
+{
+  int thrid;
+  
+  acquire(&thrid_lock);
+  thrid = nextthrid;
+  nextthrid = nextthrid + 1;
+  release(&thrid_lock);
+
+  return thrid;
+}
+
+
+// Returns 0 on success, -1 on error.
+int
 create_thread(uint *thread_id, void *(*function)(void *arg), void *arg)
 {
-  
+  struct proc *p = myproc();
+
+  // in case something went wrong finding the current process;
+  if (p == 0)
+    panic("didn't find current process");
+
+  acquire(&p->lock);
+
+  // each process has a maximum limit of creating threads
+  if (p->thread_count == MAX_THREAD) {
+    release(&p->lock);
+    return -1;
+  }
+
+  struct thread t;
+
+  // Give thread the nect available thread id
+  t.id = allocthrid();
+  copyout(p->pagetable, (uint64)thread_id, (char *)&t.id, sizeof(int));
+
+  t.state = THREAD_RUNNABLE;
 }
