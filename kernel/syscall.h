@@ -24,3 +24,4 @@
 #define SYS_report_traps 23
 #define SYS_load_traps 24
 #define SYS_create_thread 25
+#define SYS_join_thread 26
