@@ -524,13 +524,22 @@ sched(void)
     panic("sched p->lock");
   if(mycpu()->noff != 1)
     panic("sched locks");
-  if(p->state == RUNNING)
-    panic("sched running");
+  if (p->current_thread == 0) {
+    if(p->state == RUNNING)
+      panic("sched running");
+  } else {
+    if(p->current_thread->state == THREAD_RUNNING)
+      panic("sched running");
+  }
+
   if(intr_get())
     panic("sched interruptible");
 
   intena = mycpu()->intena;
-  swtch(&p->context, &mycpu()->context);
+  if (p->current_thread == 0)
+    swtch(&p->context, &mycpu()->context);
+  else
+    swtch(&p->current_thread->context, &mycpu()->context);
   mycpu()->intena = intena;
 }
 
