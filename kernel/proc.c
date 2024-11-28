@@ -981,9 +981,15 @@ found:
   // TODO: ra <- exit function
 
   // Set the thread's ID to the provided thread_id
-  copyout(p->pagetable, (uint64)thread_id, (char *)&t->id, sizeof(t->id));
-  // Set the current thread to the newly created thread (if required)
-  p->current_thread = t;
+  if (copyout(p->pagetable, (uint64)thread_id, (char *)&t->id, sizeof(t->id)) < 0) {
+    t->state = THREAD_FREE;
+    free(t->trapframe);
+    free(t->context);
+    release(&p->lock);
+    return -1;
+  }
+
+  p->thread_count++;
 
   // Release the lock as the thread creation process is now complete
   release(&p->lock);
