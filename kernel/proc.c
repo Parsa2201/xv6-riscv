@@ -918,7 +918,7 @@ allocthrid()
 }
 
 // Returns 0 on success, -1 on error.
-int create_thread(uint *thread_id, void *(*function)(void *arg), void *arg) {
+int create_thread(uint *thread_id, void *(*function)(void *arg), void *arg, void *stack, uint64 stack_size) {
   struct thread *t;
   struct proc *p = myproc();
 
@@ -963,22 +963,22 @@ found:
       return -1; // Failed to allocate trapframe
   }
 
-  // Allocate stack for the thread
-  uint64 stack = (uint64)kalloc();
-  if (stack == 0) {
-      kfree((void *)t->trapframe);
+  // Allocate a trapframe for the thread
+  if ((t->context = (struct context *)kalloc()) == 0) {
       t->state = THREAD_FREE;
+      free(t->trapframe);
       release(&p->lock);
-      return -1; // Failed to allocate stack
+      return -1; // Failed to allocate trapframe
   }
 
   // Initialize the trapframe with default values
   memset(t->trapframe, 0, sizeof(*t->trapframe));
   
   // Set up the trapframe for the thread to execute the function
-  t->trapframe->epc = (uint64)function;   // Program Counter: function to execute
-  t->trapframe->sp = stack + PGSIZE;      // Stack Pointer: stack allocated for the thread  -- Not Sure about PGSIZE
-  t->trapframe->a0 = (uint64)arg;         // Argument for the function
+  t->context->ra = t->trapframe->epc = (uint64)function;      // Program Counter: function to execute
+  t->context->sp = t->trapframe->sp = stack + stack_size;     // Stack Pointer: stack allocated for the thread  -- Not Sure about PGSIZE
+  t->trapframe->a0 = (uint64)arg;                             // Argument for the function
+  // TODO: ra <- exit function
 
   // Set the thread's ID to the provided thread_id
   copyout(p->pagetable, (uint64)thread_id, (char *)&t->id, sizeof(t->id));
