@@ -480,6 +480,18 @@ scheduler(void)
         c->proc = p;
         swtch(&c->context, &p->context);
 
+        if (p->thread_count > 0) {
+          for (struct thread *t = p->threads; t < &p->threads[MAX_THREAD]; t++) {
+            if (t->state == THREAD_FREE || t->state == THREAD_JOINED)
+              continue;
+
+            p->state = THREAD_RUNNING;
+            p->current_thread = t;
+            swtch(&c->context, &t->context);
+          }
+        }
+        p->current_thread = 0;
+
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
