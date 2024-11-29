@@ -1008,10 +1008,11 @@ found:
   memset(t->trapframe, 0, sizeof(*t->trapframe));
   
   // Set up the trapframe for the thread to execute the function
-  t->context->ra = t->trapframe->epc = (uint64)function;      // Program Counter: function to execute
-  t->context->sp = t->trapframe->sp = stack + stack_size;     // Stack Pointer: stack allocated for the thread  -- Not Sure about PGSIZE
-  t->trapframe->a0 = (uint64)arg;                             // Argument for the function
-  // TODO: ra <- exit function
+  t->trapframe->epc = (uint64)function;                   // Start function
+  t->trapframe->sp = (uint64)stack + stack_size - 16;     // Stack Pointer: stack allocated for the thread
+  t->trapframe->a0 = (uint64)arg;                         // Argument for the function
+  t->context->ra = (uint64)thread_exit;                   // Return to thread_exit
+  t->context->sp = t->trapframe->sp;
 
   // Set the thread's ID to the provided thread_id
   if (copyout(p->pagetable, (uint64)thread_id, (char *)&t->id, sizeof(t->id)) < 0) {
@@ -1062,4 +1063,10 @@ int join_thread(uint* thread_id) {
 
   release(&p->lock);
   return 0; // Success
+}
+
+void
+thread_exit(void)
+{
+  // TODO
 }
