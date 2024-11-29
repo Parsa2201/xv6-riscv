@@ -496,7 +496,7 @@ scheduler(void)
 
             p->state = THREAD_RUNNING;
             p->current_thread = t;
-            swtch(&c->context, &t->context);
+            swtch(&c->context, t->context);
           }
         }
         p->current_thread = 0;
@@ -548,7 +548,7 @@ sched(void)
   if (p->current_thread == 0)
     swtch(&p->context, &mycpu()->context);
   else
-    swtch(&p->current_thread->context, &mycpu()->context);
+    swtch(p->current_thread->context, &mycpu()->context);
   mycpu()->intena = intena;
 }
 
@@ -999,7 +999,7 @@ found:
   // Allocate a trapframe for the thread
   if ((t->context = (struct context *)kalloc()) == 0) {
       t->state = THREAD_FREE;
-      free(t->trapframe);
+      kfree(t->trapframe);
       release(&p->lock);
       return -1; // Failed to allocate trapframe
   }
@@ -1017,8 +1017,8 @@ found:
   // Set the thread's ID to the provided thread_id
   if (copyout(p->pagetable, (uint64)thread_id, (char *)&t->id, sizeof(t->id)) < 0) {
     t->state = THREAD_FREE;
-    free(t->trapframe);
-    free(t->context);
+    kfree(t->trapframe);
+    kfree(t->context);
     release(&p->lock);
     return -1;
   }
@@ -1075,8 +1075,8 @@ thread_exit(void)
   acquire(&p->lock);
 
   // Clean up resources
-  free(t->trapframe);
-  free(t->context);
+  kfree(t->trapframe);
+  kfree(t->context);
   t->trapframe = 0;
   t->context = 0;
   t->state = THREAD_FREE;
