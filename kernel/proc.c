@@ -108,7 +108,7 @@ struct trapframe*
 current_trapframe(struct proc *p)
 {
   if (p->current_thread)
-    return p->current_thread;
+    return p->current_thread->trapframe;
   else
     return p->trapframe;
 }
