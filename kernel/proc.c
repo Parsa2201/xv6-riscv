@@ -104,6 +104,15 @@ myproc(void)
   return p;
 }
 
+struct trapframe*
+current_trapframe(struct proc *p)
+{
+  if (p->current_thread == 0)
+    return p->current_thread;
+  else
+    return p->trapframe;
+}
+
 int
 allocpid()
 {
