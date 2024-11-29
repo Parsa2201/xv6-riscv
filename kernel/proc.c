@@ -1068,5 +1068,27 @@ int join_thread(uint* thread_id) {
 void
 thread_exit(void)
 {
-  // TODO
+  struct proc *p = myproc();
+  struct thread *t = p->current_thread;
+
+  // Acquire process lock
+  acquire(&p->lock);
+
+  // Clean up resources
+  free(t->trapframe);
+  free(t->context);
+  t->trapframe = 0;
+  t->context = 0;
+  t->state = THREAD_FREE;
+
+  // Decrement thread count
+  p->thread_count--;
+
+  // Remove the thread from process
+  p->current_thread = 0;
+
+  // Yield CPU
+  sched();
+
+  release(&p->lock);
 }
