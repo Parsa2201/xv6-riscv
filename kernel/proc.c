@@ -950,6 +950,18 @@ allocthrid()
   return thrid;
 }
 
+// Creates a new thread for the current process.
+// Returns the thread id in thread_id if the thread creation
+// is successfull. Gets the start function (function) and it's argument (arg)
+// as the arguments. It also needs an allocated memmory (user space) for the
+// thread stack, and also it's size (in bytes).
+// # Args
+// - `uint *thread_id`: The id of the created thread
+// - `void *(*function)(void *)`: The start function to be executed by the thread
+// - `void *arg`: The parameter to be given to the start function
+// - `void *stack`: A pointer to where the stack of the new thread should be pointing at
+// - `uint64 stack_size`: The size of the given stack
+// # Return
 // Returns 0 on success, -1 on error.
 int create_thread(uint *thread_id, void *(*function)(void *arg), void *arg, void *stack, uint64 stack_size) {
   struct thread *t;
