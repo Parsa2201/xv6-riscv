@@ -539,14 +539,7 @@ sched(void)
     panic("sched interruptible");
 
   intena = mycpu()->intena;
-<<<<<<< HEAD
-  if (p->current_thread == 0)
-    swtch(&p->context, &mycpu()->context);
-  else
-    swtch(p->current_thread->context, &mycpu()->context);
-=======
   swtch(&p->context, &mycpu()->context);
->>>>>>> parent of 0bb0a1a (edited yield and sched for context switch when a timer interrupt occures.)
   mycpu()->intena = intena;
 }
 
