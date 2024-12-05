@@ -549,10 +549,7 @@ yield(void)
 {
   struct proc *p = myproc();
   acquire(&p->lock);
-  if (p->current_thread == 0)
-    p->state = RUNNABLE;
-  else
-    p->current_thread->state = THREAD_RUNNABLE;
+  p->state = RUNNABLE;
   sched();
   release(&p->lock);
 }
