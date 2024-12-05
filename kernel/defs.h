@@ -121,7 +121,7 @@ void            add_trap(int, int, int);
 int             load_traps();
 int             allocthrid();
 int             create_thread(uint *, void *(*)(void *arg), void *, void *, uint64);
-int             join_thread(uint *);
+int             join_thread(uint);
 void            thread_exit_caller(void);
 void            thread_exit(int, int);
 

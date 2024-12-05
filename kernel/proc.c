@@ -1055,7 +1055,7 @@ found:
   return 0; // Success
 }
 
-int join_thread(uint* thread_id) {
+int join_thread(uint thread_id) {
   struct proc *p = myproc();
   struct thread *t;
   int found = 0;
@@ -1064,7 +1064,7 @@ int join_thread(uint* thread_id) {
 
   // Finding the thread with the given ID
   for (t = p->threads; t < &p->threads[MAX_THREAD]; t++) {
-      if (t->id == *thread_id) {
+      if (t->id == thread_id) {
           found = 1;
           break;
       }
