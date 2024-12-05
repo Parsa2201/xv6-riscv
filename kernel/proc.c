@@ -1060,15 +1060,8 @@ int join_thread(uint* thread_id) {
       return -1; // No thread with this ID found
   }
 
-  // Wait for the thread to finish
-  // while (t->state != THREAD_ZOMBIE) {
-  //     sleep(t, &p->lock);
-  // }
-
-  // Clean up resources used by the thread
-  kfree((void *)t->trapframe);
-  t->state = THREAD_FREE;
-  t->id = 0;
+  t->state = THREAD_JOINED;
+  // TODO: change current thread join value to t->id
 
   release(&p->lock);
   return 0; // Success
