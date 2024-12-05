@@ -389,11 +389,12 @@ exit(int status)
     }
   }
 
+  acquire(&p->lock);
   // free all threads of the process
   for (struct thread *t = p->threads; t <= &p->threads[MAX_THREAD]; t++) {
     if (t->state != THREAD_FREE) {
       p->current_thread = t;
-      thread_exit(1, 0);
+      thread_exit(0, 0);
     }
   }
 
@@ -401,6 +402,7 @@ exit(int status)
   p->proc_thread.join = 0;
   p->proc_thread.state = THREAD_FREE;
   p->proc_thread.trapframe = 0;
+  release(&p->lock);
 
   begin_op();
   iput(p->cwd);
