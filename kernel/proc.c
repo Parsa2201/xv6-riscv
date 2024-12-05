@@ -397,6 +397,11 @@ exit(int status)
     }
   }
 
+  p->proc_thread.id = 0;
+  p->proc_thread.join = 0;
+  p->proc_thread.state = THREAD_FREE;
+  p->proc_thread.trapframe = 0;
+
   begin_op();
   iput(p->cwd);
   end_op();
