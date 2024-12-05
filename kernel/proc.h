@@ -121,6 +121,7 @@ struct proc {
 
   struct thread threads[MAX_THREAD];
   struct thread *current_thread;
+  struct thread proc_thread;
   int thread_count;
 };
 

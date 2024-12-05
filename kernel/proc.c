@@ -170,6 +170,11 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  p->proc_thread.id = allocthrid();
+  p->proc_thread.join = 0;
+  p->proc_thread.state = THREAD_RUNNABLE;
+  p->proc_thread.trapframe = p->trapframe;
+
   return p;
 }
 
