@@ -1107,6 +1107,12 @@ void thread_exit(int should_acquire, int should_sched)
   // Remove the thread from process
   p->current_thread = 0;
 
+  // wakeup the joned thread
+  if (t->join != 0)
+    for (struct thread *tt = p->threads; tt <= &p->threads[MAX_THREAD]; tt++)
+      if (tt->id == t->join && tt->state == THREAD_JOINED)
+        tt->state = THREAD_RUNNABLE;
+
   // Yield CPU
   if (should_sched)
     sched();
