@@ -498,9 +498,12 @@ scheduler(void)
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
+        if (p->proc_thread.state != THREAD_JOINED) {
+          p->proc_thread.state = THREAD_RUNNING;
+          p->state = RUNNING;
+          c->proc = p;
+          swtch(&c->context, &p->context);
+        }
 
         struct trapframe proc_trapframe = *(p->trapframe);
 
