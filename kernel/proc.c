@@ -384,6 +384,14 @@ exit(int status)
     }
   }
 
+  // free all threads of the process
+  for (struct thread *t = p->threads; t <= &p->threads[MAX_THREAD]; t++) {
+    if (t->state != THREAD_FREE) {
+      p->current_thread = t;
+      thread_exit(0);
+    }
+  }
+
   begin_op();
   iput(p->cwd);
   end_op();
@@ -489,7 +497,7 @@ scheduler(void)
         c->proc = p;
         swtch(&c->context, &p->context);
 
-        struct trapframe *proc_trapframe = p->trapframe;
+        struct trapframe proc_trapframe = *(p->trapframe);
 
         if (p->thread_count > 0) {
           for (struct thread *t = p->threads; t < &p->threads[MAX_THREAD]; t++) {
@@ -499,15 +507,18 @@ scheduler(void)
             p->state = THREAD_RUNNING;
             p->current_thread = t;
 
-            // change thr process trapframe with current thread trapframe
-            p->trapframe = t->trapframe;
+            // change the process trapframe with current thread trapframe
+            *(p->trapframe) = *(t->trapframe);
+            printf("running thread1 %d\n", t->id);
             swtch(&c->context, &p->context);
+            printf("running thread2 %d\n", t->id);
+            p->state = THREAD_RUNNABLE;
           }
         }
         p->current_thread = 0;
 
         // restore the main thread trapframe to the process
-        p->trapframe = proc_trapframe;
+        *(p->trapframe) = proc_trapframe;
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
@@ -1009,9 +1020,9 @@ found:
   
   // Set up the trapframe for the thread to execute the function
   t->trapframe->epc = (uint64)function;                   // Start function
-  t->trapframe->sp = (uint64)stack + stack_size - 16;     // Stack Pointer: stack allocated for the thread
+  t->trapframe->sp = (uint64)stack + stack_size;     // Stack Pointer: stack allocated for the thread
   t->trapframe->a0 = (uint64)arg;
-  t->trapframe->ra = 0;                                   // Argument for the function
+  t->trapframe->ra = (uint64)thread_exit_caller;                                   // Argument for the function
 
   // Set the thread's ID to the provided thread_id
   if (copyout(p->pagetable, (uint64)thread_id, (char *)&t->id, sizeof(t->id)) < 0) {
@@ -1064,13 +1075,23 @@ int join_thread(uint* thread_id) {
 }
 
 void
-thread_exit(void)
+thread_exit_caller(void)
+{
+  thread_exit(1);
+}
+
+// # Arguments:
+// - `should_acquire`: should we acquire the p->lock or not
+//              1 means we should
+//              0 means we shouldn't
+void thread_exit(int should_acquire)
 {
   struct proc *p = myproc();
   struct thread *t = p->current_thread;
 
   // Acquire process lock
-  acquire(&p->lock);
+  if (should_acquire)
+    acquire(&p->lock);
 
   // Clean up resources
   kfree(t->trapframe);
@@ -1084,7 +1105,9 @@ thread_exit(void)
   p->current_thread = 0;
 
   // Yield CPU
-  sched();
+  if (should_acquire)
+    sched();
 
-  release(&p->lock);
+  if (should_acquire)
+    release(&p->lock);
 }
