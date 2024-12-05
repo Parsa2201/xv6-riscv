@@ -489,6 +489,8 @@ scheduler(void)
         c->proc = p;
         swtch(&c->context, &p->context);
 
+        struct trapframe *proc_trapframe = p->trapframe;
+
         if (p->thread_count > 0) {
           for (struct thread *t = p->threads; t < &p->threads[MAX_THREAD]; t++) {
             if (t->state == THREAD_FREE || t->state == THREAD_JOINED)
@@ -496,10 +498,16 @@ scheduler(void)
 
             p->state = THREAD_RUNNING;
             p->current_thread = t;
-            swtch(&c->context, t->context);
+
+            // change thr process trapframe with current thread trapframe
+            p->trapframe = t->trapframe;
+            swtch(&c->context, &p->context);
           }
         }
         p->current_thread = 0;
+        
+        // restore the main thread trapframe to the process
+        p->trapframe = proc_trapframe;
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
