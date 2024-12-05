@@ -49,7 +49,11 @@ usertrap(void)
   
   // save user program counter.
   p->trapframe->epc = r_sepc();
-  
+  // if (p->trapframe->epc == p->trapframe->ra) {
+  //   thread_exit(1, 0);
+  //   return;
+  // }
+
   if(r_scause() == 8){
     // system call
 
