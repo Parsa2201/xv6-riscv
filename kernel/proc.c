@@ -507,6 +507,7 @@ scheduler(void)
         // before jumping back to us.
         if (p->proc_thread.state != THREAD_JOINED) {
           p->proc_thread.state = THREAD_RUNNING;
+          p->current_thread = &p->proc_thread;
           p->state = RUNNING;
           c->proc = p;
           swtch(&c->context, &p->context);
@@ -1075,8 +1076,8 @@ int join_thread(uint* thread_id) {
       return -1; // No thread with this ID found
   }
 
-  t->state = THREAD_JOINED;
-  // TODO: change current thread join value to t->id
+  p->current_thread->state = THREAD_JOINED;
+  t->join = p->current_thread->id;
 
   release(&p->lock);
   return 0; // Success
