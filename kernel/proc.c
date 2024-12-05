@@ -388,7 +388,7 @@ exit(int status)
   for (struct thread *t = p->threads; t <= &p->threads[MAX_THREAD]; t++) {
     if (t->state != THREAD_FREE) {
       p->current_thread = t;
-      thread_exit(0);
+      thread_exit(1, 0);
     }
   }
 
@@ -1077,14 +1077,17 @@ int join_thread(uint* thread_id) {
 void
 thread_exit_caller(void)
 {
-  thread_exit(1);
+  thread_exit(1, 1);
 }
 
 // # Arguments:
-// - `should_acquire`: should we acquire the p->lock or not
+// - `should_acquire`: should we acquire the `p->lock` or not
 //              1 means we should
 //              0 means we shouldn't
-void thread_exit(int should_acquire)
+// - `should_sched`: should we call `sched()` after exiting the thread or not
+//              1 means we should
+//              0 means we shouldn't
+void thread_exit(int should_acquire, int should_sched)
 {
   struct proc *p = myproc();
   struct thread *t = p->current_thread;
@@ -1105,7 +1108,7 @@ void thread_exit(int should_acquire)
   p->current_thread = 0;
 
   // Yield CPU
-  if (should_acquire)
+  if (should_sched)
     sched();
 
   if (should_acquire)

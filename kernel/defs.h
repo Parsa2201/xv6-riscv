@@ -122,7 +122,7 @@ int             load_traps();
 int             create_thread(uint *, void *(*)(void *arg), void *, void *, uint64);
 int             join_thread(uint *);
 void            thread_exit_caller(void);
-void            thread_exit(int);
+void            thread_exit(int, int);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
