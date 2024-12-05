@@ -133,7 +133,7 @@ sys_create_thread(void)
 uint64
 sys_join_thread(void) 
 {
-  uint *thread_id;
+  uint thread_id;
   argaddr(0, (uint64 *)&thread_id);
   return join_thread(thread_id);
 }
