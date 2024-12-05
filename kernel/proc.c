@@ -505,7 +505,7 @@ scheduler(void)
           }
         }
         p->current_thread = 0;
-        
+
         // restore the main thread trapframe to the process
         p->trapframe = proc_trapframe;
 
@@ -1004,29 +1004,19 @@ found:
       return -1; // Failed to allocate trapframe
   }
 
-  // Allocate a trapframe for the thread
-  if ((t->context = (struct context *)kalloc()) == 0) {
-      t->state = THREAD_FREE;
-      kfree(t->trapframe);
-      release(&p->lock);
-      return -1; // Failed to allocate trapframe
-  }
-
   // Initialize the trapframe with default values
   memset(t->trapframe, 0, sizeof(*t->trapframe));
   
   // Set up the trapframe for the thread to execute the function
   t->trapframe->epc = (uint64)function;                   // Start function
   t->trapframe->sp = (uint64)stack + stack_size - 16;     // Stack Pointer: stack allocated for the thread
-  t->trapframe->a0 = (uint64)arg;                         // Argument for the function
-  t->context->ra = (uint64)thread_exit;                   // Return to thread_exit
-  t->context->sp = t->trapframe->sp;
+  t->trapframe->a0 = (uint64)arg;
+  t->trapframe->ra = 0;                                   // Argument for the function
 
   // Set the thread's ID to the provided thread_id
   if (copyout(p->pagetable, (uint64)thread_id, (char *)&t->id, sizeof(t->id)) < 0) {
     t->state = THREAD_FREE;
     kfree(t->trapframe);
-    kfree(t->context);
     release(&p->lock);
     return -1;
   }
@@ -1084,9 +1074,7 @@ thread_exit(void)
 
   // Clean up resources
   kfree(t->trapframe);
-  kfree(t->context);
   t->trapframe = 0;
-  t->context = 0;
   t->state = THREAD_FREE;
 
   // Decrement thread count
