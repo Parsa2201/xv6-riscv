@@ -170,6 +170,7 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  printf("making proc\n");
   p->proc_thread.id = allocthrid();
   p->proc_thread.join = 0;
   p->proc_thread.state = THREAD_RUNNABLE;
@@ -400,18 +401,21 @@ exit(int status)
 
   acquire(&p->lock);
   // free all threads of the process
-  for (struct thread *t = p->threads; t <= &p->threads[MAX_THREAD]; t++) {
-    if (t->state != THREAD_FREE) {
-      p->current_thread = t;
-      thread_exit(0, 0);
+  if (p->thread_count > 0)
+    for (struct thread *t = p->threads; t <= &p->threads[MAX_THREAD]; t++) {
+      if (t->state != THREAD_FREE) {
+        p->current_thread = t;
+        thread_exit(0, 0);
+      }
     }
-  }
 
   p->proc_thread.id = 0;
   p->proc_thread.join = 0;
   p->proc_thread.state = THREAD_FREE;
   p->proc_thread.trapframe = 0;
+  // printf("exiting process1\n");
   release(&p->lock);
+  // printf("exiting process2\n");
 
   begin_op();
   iput(p->cwd);
@@ -432,6 +436,8 @@ exit(int status)
   p->state = ZOMBIE;
 
   release(&wait_lock);
+
+  // printf("exiting process3\n");
 
   // Jump into the scheduler, never to return.
   sched();
@@ -501,6 +507,7 @@ scheduler(void)
   struct cpu *c = mycpu();
 
   c->proc = 0;
+  // int flag = 0;
   for(;;){
     // The most recent process to run may have had interrupts
     // turned off; enable them to avoid a deadlock if all
@@ -511,6 +518,11 @@ scheduler(void)
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
+        // if (flag == 1) {
+        //     printf("KOMAK\n");
+        //     printf("this process name is: %s\n", p->name);
+        // }
+
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
@@ -519,23 +531,62 @@ scheduler(void)
           p->current_thread = &p->proc_thread;
           p->state = RUNNING;
           c->proc = p;
+          // if (flag == 1)
+          //   printf("KOMAK\n");
           swtch(&c->context, &p->context);
+          if (p->state == ZOMBIE || p->state == UNUSED) {
+            // printf("exiting process checked from sched\n");
+            // flag = 1;
+            p->current_thread = 0;
+            c->proc = 0;
+            found = 1;
+            release(&p->lock);
+            continue;
+          }
         }
 
         struct trapframe proc_trapframe = *(p->trapframe);
+        int proc_exited = 0;
+        int thread_exited = 0;
 
         if (p->thread_count > 0) {
-          for (struct thread *t = p->threads; t < &p->threads[MAX_THREAD]; t++) {
-            if (t->state == THREAD_FREE || t->state == THREAD_JOINED || t->state == THREAD_RUNNING)
+          for (struct thread *t = p->threads; t < &p->threads[MAX_THREAD]; t++)
+          {
+            if (t->state != THREAD_RUNNABLE)
               continue;
+            if (p->state == ZOMBIE || p->state == UNUSED) {
+              proc_exited = 1;
+              break;
+            }
 
             p->state = RUNNING;
             t->state = THREAD_RUNNING;
             p->current_thread = t;
 
             // change the process trapframe with current thread trapframe
+            // if (t->trapframe == 0)
+            //   printf("trapframe is NULL\n");
             *(p->trapframe) = *(t->trapframe);
             swtch(&c->context, &p->context);
+
+            // check if the process has exited
+            if (p->state == ZOMBIE || p->state == UNUSED) {
+              proc_exited = 1;
+              // printf("exiting process checked from sched\n");
+              break;
+            }
+            if (t->state == THREAD_FREE) {
+              // printf("thread exited\n");
+              thread_exited = 1;
+              // flag = 1;
+              break;
+            }
+
+            // if (t->trapframe == 0)
+              // printf("trapframe is NULL\n");
+            // update the trapframe of the current thread
+            *(t->trapframe) = *(p->trapframe);
+            // TODO: check for joined thread and process (main thread)
             p->state = RUNNING;
             t->state = THREAD_RUNNABLE;
           }
@@ -543,13 +594,23 @@ scheduler(void)
         p->current_thread = 0;
 
         // restore the main thread trapframe to the process
-        *(p->trapframe) = proc_trapframe;
+        if (proc_exited == 0) {
+          *(p->trapframe) = proc_trapframe;
+          if (thread_exited) {
+            // printf("restoring the process when thread is exited\n");
+            // printf("p->epc = %ld\n", p->trapframe->epc);
+          }
+
+          p->state = RUNNABLE;
+        }
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
         found = 1;
       }
+      // if (flag == 1)
+            // printf("KOMAK\n");
       release(&p->lock);
     }
     if(found == 0) {
@@ -1049,7 +1110,7 @@ found:
   t->trapframe->epc = (uint64)function;                   // Start function
   t->trapframe->sp = (uint64)stack + stack_size;     // Stack Pointer: stack allocated for the thread
   t->trapframe->a0 = (uint64)arg;
-  t->trapframe->ra = (uint64)thread_exit_caller;   
+  t->trapframe->ra = (uint64)-1;   
                                   // Argument for the function
 
   // Set the thread's ID to the provided thread_id
@@ -1068,6 +1129,7 @@ found:
 }
 
 int join_thread(uint thread_id) {
+  // printf("joining thread\n");
   struct proc *p = myproc();
   struct thread *t;
   int found = 0;
@@ -1088,11 +1150,18 @@ int join_thread(uint thread_id) {
       return -1; // No thread with this ID found
   }
 
+  if (t->state == THREAD_FREE) {
+    release(&p->lock);
+    return -1;
+  }
+
   p->current_thread->state = THREAD_JOINED;
   t->join = p->current_thread->id;
+  printf("%d joined on thread id: %d\n", t->join, thread_id);
 
   release(&p->lock);
   yield();
+  usertrapret();
   return 0; // Success
 }
 
@@ -1111,14 +1180,16 @@ thread_exit_caller(void)
 //              0 means we shouldn't
 void thread_exit(int should_acquire, int should_sched)
 {
-  printf("exiting thread\n");
+  // printf("exiting thread1\n");
   struct proc *p = myproc();
   struct thread *t = p->current_thread;
+  // printf("current thread id from exiting thread: %d\n", p->current_thread->id);
 
   // Acquire process lock
   if (should_acquire)
     acquire(&p->lock);
 
+  // printf("exiting thread2\n");
   // Clean up resources
   if (t != &p->proc_thread && t->trapframe != 0) {
     kfree(t->trapframe);
@@ -1126,6 +1197,7 @@ void thread_exit(int should_acquire, int should_sched)
   }
   t->state = THREAD_FREE;
 
+  // printf("exiting thread3\n");
   // Decrement thread count
   if (t != &p->proc_thread)
     p->thread_count--;
@@ -1133,19 +1205,29 @@ void thread_exit(int should_acquire, int should_sched)
   // Remove the thread from process
   p->current_thread = 0;
 
+  // printf("exiting thread4\n");
+
+  // printf("t->join = %d\n", t->join);
   // wakeup the joned thread
   if (t->join != 0) {
     for (struct thread *tt = p->threads; tt <= &p->threads[MAX_THREAD]; tt++)
-      if (tt->id == t->join && tt->state == THREAD_JOINED)
+      if (tt->id == t->join && tt->state == THREAD_JOINED) {
         tt->state = THREAD_RUNNABLE;
-    if (p->proc_thread.id == t->join)
+        // printf("thread %d is awake\n", t->join);
+      }
+    if (p->proc_thread.id == t->join) {
       p->proc_thread.state = THREAD_RUNNABLE;
+      // printf("thread %d is awake\n", t->join);
+    }
   }
+
+  // printf("exiting thread5\n");
+
+  // printf("exiting thread6, should acquire = %d\n", should_acquire);
+  if (should_acquire)
+    release(&p->lock);
 
   // Yield CPU
   if (should_sched)
-    sched();
-
-  if (should_acquire)
-    release(&p->lock);
+    yield();
 }
