@@ -49,10 +49,18 @@ usertrap(void)
   
   // save user program counter.
   p->trapframe->epc = r_sepc();
-  // if (p->trapframe->epc == p->trapframe->ra) {
-  //   thread_exit(1, 0);
-  //   return;
+  // if (p->trapframe->ra == -1) {
+  //   printf("ra is -1\n");
+  //   printf("epc is %ld\n", p->trapframe->epc);
   // }
+  // if (p->trapframe->epc == -1)
+  //   printf("epc is -1\n");
+  if (p->trapframe->epc == -2 && p->trapframe->ra == -1)
+  {
+    thread_exit(1, 1);
+    usertrapret();
+    return;
+  }
 
   if(r_scause() == 8){
     // system call
@@ -72,7 +80,7 @@ usertrap(void)
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
-    add_trap(r_scause(), r_sepc(), r_stval());
+    // add_trap(r_scause(), r_sepc(), r_stval());
 
     printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
     printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
