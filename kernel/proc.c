@@ -507,7 +507,6 @@ scheduler(void)
   struct cpu *c = mycpu();
 
   c->proc = 0;
-  // int flag = 0;
   for(;;){
     // The most recent process to run may have had interrupts
     // turned off; enable them to avoid a deadlock if all
@@ -518,25 +517,16 @@ scheduler(void)
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
-        // if (flag == 1) {
-        //     printf("KOMAK\n");
-        //     printf("this process name is: %s\n", p->name);
-        // }
-
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
+        p->state = RUNNING;
+        c->proc = p;
         if (p->proc_thread.state != THREAD_JOINED) {
           p->proc_thread.state = THREAD_RUNNING;
           p->current_thread = &p->proc_thread;
-          p->state = RUNNING;
-          c->proc = p;
-          // if (flag == 1)
-          //   printf("KOMAK\n");
           swtch(&c->context, &p->context);
           if (p->state == ZOMBIE || p->state == UNUSED) {
-            // printf("exiting process checked from sched\n");
-            // flag = 1;
             p->current_thread = 0;
             c->proc = 0;
             found = 1;
@@ -552,7 +542,7 @@ scheduler(void)
         if (p->thread_count > 0) {
           for (struct thread *t = p->threads; t < &p->threads[MAX_THREAD]; t++)
           {
-            if (t->state != THREAD_RUNNABLE)
+            if (t->state != THREAD_RUNNABLE || t->state == THREAD_JOINED)
               continue;
             if (p->state == ZOMBIE || p->state == UNUSED) {
               proc_exited = 1;
@@ -564,31 +554,27 @@ scheduler(void)
             p->current_thread = t;
 
             // change the process trapframe with current thread trapframe
-            // if (t->trapframe == 0)
-            //   printf("trapframe is NULL\n");
             *(p->trapframe) = *(t->trapframe);
+            // printf("p->a0 (1) = %ld\n", p->trapframe->a0);
             swtch(&c->context, &p->context);
+            // printf("p->a0 (2) = %ld\n", p->trapframe->a0);
 
             // check if the process has exited
             if (p->state == ZOMBIE || p->state == UNUSED) {
               proc_exited = 1;
-              // printf("exiting process checked from sched\n");
               break;
             }
             if (t->state == THREAD_FREE) {
-              // printf("thread exited\n");
               thread_exited = 1;
-              // flag = 1;
               break;
             }
 
-            // if (t->trapframe == 0)
-              // printf("trapframe is NULL\n");
             // update the trapframe of the current thread
             *(t->trapframe) = *(p->trapframe);
             // TODO: check for joined thread and process (main thread)
             p->state = RUNNING;
-            t->state = THREAD_RUNNABLE;
+            if (t->state != THREAD_JOINED)
+              t->state = THREAD_RUNNABLE;
           }
         }
         p->current_thread = 0;
@@ -652,7 +638,9 @@ sched(void)
 void
 yield(void)
 {
+  // printf("yielding\n");
   struct proc *p = myproc();
+  // printf("t.epc is %ld\n", p->trapframe->epc);
   acquire(&p->lock);
   p->state = RUNNABLE;
   if (p->proc_thread.state == THREAD_RUNNING)
@@ -1047,7 +1035,7 @@ allocthrid()
 
 // Creates a new thread for the current process.
 // Returns the thread id in thread_id if the thread creation
-// is successfull. Gets the start function (function) and it's argument (arg)
+// is successful. Gets the start function (function) and it's argument (arg)
 // as the arguments. It also needs an allocated memmory (user space) for the
 // thread stack, and also it's size (in bytes).
 // # Args
@@ -1092,7 +1080,7 @@ found:
   
   // Assign a unique thread ID
   t->id = allocthrid();
-  
+
   // Initialize the join variable
   t->join = 0;
 
@@ -1110,8 +1098,8 @@ found:
   t->trapframe->epc = (uint64)function;                   // Start function
   t->trapframe->sp = (uint64)stack + stack_size;     // Stack Pointer: stack allocated for the thread
   t->trapframe->a0 = (uint64)arg;
-  t->trapframe->ra = (uint64)-1;   
-                                  // Argument for the function
+  t->trapframe->ra = (uint64)-1;
+  // Argument for the function
 
   // Set the thread's ID to the provided thread_id
   if (copyout(p->pagetable, (uint64)thread_id, (char *)&t->id, sizeof(t->id)) < 0) {
@@ -1156,8 +1144,9 @@ int join_thread(uint thread_id) {
   }
 
   p->current_thread->state = THREAD_JOINED;
-  t->join = p->current_thread->id;
-  printf("%d joined on thread id: %d\n", t->join, thread_id);
+  // t->join = p->current_thread->id;
+  p->current_thread->join = t->id;
+  // printf("%d joined on thread id: %d\n", t->join, thread_id);
 
   release(&p->lock);
   yield();
@@ -1209,16 +1198,16 @@ void thread_exit(int should_acquire, int should_sched)
 
   // printf("t->join = %d\n", t->join);
   // wakeup the joned thread
-  if (t->join != 0) {
-    for (struct thread *tt = p->threads; tt <= &p->threads[MAX_THREAD]; tt++)
-      if (tt->id == t->join && tt->state == THREAD_JOINED) {
-        tt->state = THREAD_RUNNABLE;
-        // printf("thread %d is awake\n", t->join);
-      }
-    if (p->proc_thread.id == t->join) {
-      p->proc_thread.state = THREAD_RUNNABLE;
+  for (struct thread *tt = p->threads; tt <= &p->threads[MAX_THREAD]; tt++)
+    if (tt->join == t->id && tt->state == THREAD_JOINED) {
+      tt->state = THREAD_RUNNABLE;
+      tt->join = 0;
       // printf("thread %d is awake\n", t->join);
     }
+  if (p->proc_thread.join == t->id) {
+    p->proc_thread.state = THREAD_RUNNABLE;
+    p->proc_thread.join = 0;
+    // printf("thread %d is awake\n", t->join);
   }
 
   // printf("exiting thread5\n");
@@ -1228,6 +1217,8 @@ void thread_exit(int should_acquire, int should_sched)
     release(&p->lock);
 
   // Yield CPU
-  if (should_sched)
+  if (should_sched) {
     yield();
+    usertrapret();
+  }
 }
