@@ -187,10 +187,8 @@ found:
 
   // init proc usage
   p->usage.sum = 0;
-  acquire(&tickslock);
   p->usage.start = ticks;
   p->usage.last_tick = ticks;
-  release(&tickslock);
 
   // set quota to infinity = the proc can live forever
   p->usage.quota = (uint)-1;
@@ -536,10 +534,10 @@ scheduler(void)
           p->proc_thread.state = THREAD_RUNNING;
           p->current_thread = &p->proc_thread;
 
-          uint start = current_tick();
+          uint start = ticks;
           p->usage.last_tick = start;
           swtch(&c->context, &p->context);
-          uint end = current_tick();
+          uint end = ticks;
           p->usage.sum += end - start;
           p->usage.last_tick = end;
 
@@ -573,9 +571,9 @@ scheduler(void)
 
             // change the process trapframe with current thread trapframe
             *(p->trapframe) = *(t->trapframe);
-            uint start = current_tick();
+            uint start = ticks;
             swtch(&c->context, &p->context);
-            uint end = current_tick();
+            uint end = ticks;
             p->usage.sum += end - start;
 
             // check if the process has exited
@@ -1242,15 +1240,6 @@ void thread_exit(int should_acquire, int should_sched)
   }
 }
 
-uint current_tick()
-{
-  uint now;
-  acquire(&ticks);
-  now = ticks;
-  release(&ticks);
-  return now;
-}
-
 uint cpu_usage()
 {
   struct proc *p = myproc();
@@ -1259,7 +1248,7 @@ uint cpu_usage()
   // the total usage of the process is:
   // 1. all the times that sched has run the proc for complete round (usage.sum)
   // 2. the last round of sched that has not been calculated yet (now - last_tick)
-  uint sum = p->usage.sum + current_tick() - p->usage.last_tick;
+  uint sum = p->usage.sum + ticks - p->usage.last_tick;
   release(&p->lock);
 
   return sum;

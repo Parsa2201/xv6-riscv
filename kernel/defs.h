@@ -12,6 +12,9 @@ struct proc_info;
 struct child_processes;
 struct report;
 struct report_traps;
+struct cpu_usage;
+struct top_proc_info;
+struct top;
 
 // bio.c
 void            binit(void);

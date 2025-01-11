@@ -93,6 +93,13 @@ struct thread {
   uint join;
 };
 
+struct cpu_usage {
+  uint sum;
+  uint start;
+  uint quota;
+  uint last_tick;
+};
+
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 // Per-process state
@@ -156,14 +163,7 @@ struct report_traps {
   int count;
 };
 
-struct cpu_usage {
-  uint sum;
-  uint start;
-  uint quota;
-  uint last_tick;
-};
-
-struct proc_info {
+struct top_proc_info {
   char name[16];
   int pid;
   int ppid;
@@ -173,5 +173,5 @@ struct proc_info {
 
 struct top {
   int count;
-  struct proc_info procs[NPROC];
+  struct top_proc_info procs[NPROC];
 };
