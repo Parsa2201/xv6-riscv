@@ -28,8 +28,10 @@ int main(int argc, char *argv)
   printf("Hello World (main)\n");
   uint tid1;
   uint tid2;
+  uint tid3;
   void *stack1 = malloc(400);
   void *stack2 = malloc(400);
+  void *stack3 = malloc(400);
   printf("&a = %ld\n", (uint64) &a);
   if (create_thread(&tid1, hello_world, (void *) &a, stack1, 400) < 0)
     printf("Error making thread\n");
@@ -42,8 +44,15 @@ int main(int argc, char *argv)
   else
       printf("Succeeded!\n");
 
+  printf("&c = %ld\n", (uint64) &c);
+  if (create_thread(&tid3, hello_world, (void *) &c, stack3, 400) < 0)
+      printf("Error making thread\n");
+  else
+      printf("Succeeded!\n");
+
   join_thread(tid1);
   join_thread(tid2);
+  join_thread(tid3);
   // while(1)
   //     ;
   printf("I'm awake :)))\n");
