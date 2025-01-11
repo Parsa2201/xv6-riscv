@@ -160,6 +160,7 @@ struct cpu_usage {
   uint sum;
   uint start;
   uint quota;
+  uint last_tick;
 };
 
 struct proc_info {

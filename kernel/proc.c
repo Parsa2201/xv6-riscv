@@ -189,8 +189,9 @@ found:
   p->usage.sum = 0;
   acquire(&tickslock);
   p->usage.start = ticks;
+  p->usage.last_tick = ticks;
   release(&tickslock);
-  
+
   // set quota to infinity = the proc can live forever
   p->usage.quota = (uint)-1;
 
@@ -534,10 +535,14 @@ scheduler(void)
         if (p->proc_thread.state != THREAD_JOINED) {
           p->proc_thread.state = THREAD_RUNNING;
           p->current_thread = &p->proc_thread;
+
           uint start = current_tick();
+          p->usage.last_tick = start;
           swtch(&c->context, &p->context);
           uint end = current_tick();
           p->usage.sum += end - start;
+          p->usage.last_tick = end;
+
           if (p->state == ZOMBIE || p->state == UNUSED)
           {
             p->current_thread = 0;
@@ -1251,7 +1256,10 @@ uint cpu_usage()
   struct proc *p = myproc();
 
   acquire(&p->lock);
-  uint sum = p->usage.sum;
+  // the total usage of the process is:
+  // 1. all the times that sched has run the proc for complete round (usage.sum)
+  // 2. the last round of sched that has not been calculated yet (now - last_tick)
+  uint sum = p->usage.sum + current_tick() - p->usage.last_tick;
   release(&p->lock);
 
   return sum;
