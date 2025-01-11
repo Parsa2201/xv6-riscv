@@ -153,3 +153,22 @@ struct report_traps {
   struct report reports[MAX_REPORT_BUFFER_SIZE];
   int count;
 };
+
+struct cpu_usage {
+  uint sum;
+  uint start;
+  uint quota;
+};
+
+struct proc_info {
+  char name[16];
+  int pid;
+  int ppid;
+  enum procstate state;
+  struct cpu_usage usage;
+};
+
+struct top {
+  int count;
+  struct proc_info procs[NPROC];
+};
