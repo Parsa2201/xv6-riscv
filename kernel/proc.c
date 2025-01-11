@@ -509,7 +509,7 @@ wait(uint64 addr)
 //  - eventually that process transfers control
 //    via swtch back to the scheduler.
 void
-scheduler(void)
+scheduler2(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
@@ -612,8 +612,7 @@ scheduler(void)
         c->proc = 0;
         found = 1;
       }
-      // if (flag == 1)
-            // printf("KOMAK\n");
+
       release(&p->lock);
     }
     if(found == 0) {
@@ -621,6 +620,142 @@ scheduler(void)
       intr_on();
       asm volatile("wfi");
     }
+  }
+}
+
+void scheduler(void)
+{
+  struct proc *p;
+  struct cpu *c = mycpu();
+
+  c->proc = 0;
+  for (;;) {
+    // The most recent process to run may have had interrupts
+    // turned off; enable them to avoid a deadlock if all
+    // processes are waiting.
+    intr_on();
+
+    int found = 0;
+    uint sum;
+
+    for(struct proc *pp = proc; pp < &proc[NPROC]; pp++) {
+      acquire(&pp->lock);
+      if(pp->state == RUNNABLE) {
+        if (found == 0) {
+          p = pp;
+          sum = pp->usage.sum;
+          found = 1;
+        } else if (pp->usage.sum < sum) {
+          release(&p->lock);
+          p = pp;
+          sum = pp->usage.sum;
+        } else {
+          release(&pp->lock);
+        }
+      } else {
+        release(&pp->lock);
+      }
+    }
+
+    if(found == 0) {
+      // nothing to run; stop running on this core until an interrupt.
+      intr_on();
+      asm volatile("wfi");
+      continue;
+    }
+
+    // found
+    // p->lock is already acquired and
+    // should be released after done with it.
+    
+    // Switch to chosen process.  It is the process's job
+    // to release its lock and then reacquire it
+    // before jumping back to us.
+    p->state = RUNNING;
+    c->proc = p;
+    if (p->proc_thread.state != THREAD_JOINED) {
+      p->proc_thread.state = THREAD_RUNNING;
+      p->current_thread = &p->proc_thread;
+
+      uint start = ticks;
+      p->usage.last_tick = start;
+      swtch(&c->context, &p->context);
+      uint end = ticks;
+      p->usage.sum += end - start;
+      p->usage.last_tick = end;
+
+      if (p->state == ZOMBIE || p->state == UNUSED)
+      {
+        p->current_thread = 0;
+        c->proc = 0;
+        found = 1;
+        release(&p->lock);
+        continue;
+      }
+    }
+
+    struct trapframe proc_trapframe = *(p->trapframe);
+    int proc_exited = 0;
+    int thread_exited = 0;
+
+    if (p->thread_count > 0) {
+      for (struct thread *t = p->threads; t < &p->threads[MAX_THREAD]; t++)
+      {
+        if (t->state != THREAD_RUNNABLE || t->state == THREAD_JOINED)
+          continue;
+        if (p->state == ZOMBIE || p->state == UNUSED) {
+          proc_exited = 1;
+          break;
+        }
+
+        p->state = RUNNING;
+        t->state = THREAD_RUNNING;
+        p->current_thread = t;
+
+        // change the process trapframe with current thread trapframe
+        *(p->trapframe) = *(t->trapframe);
+        uint start = ticks;
+        swtch(&c->context, &p->context);
+        uint end = ticks;
+        p->usage.sum += end - start;
+
+        // check if the process has exited
+        if (p->state == ZOMBIE || p->state == UNUSED) {
+          proc_exited = 1;
+          break;
+        }
+        if (t->state == THREAD_FREE) {
+          thread_exited = 1;
+          break;
+        }
+
+        // update the trapframe of the current thread
+        *(t->trapframe) = *(p->trapframe);
+        // TODO: check for joined thread and process (main thread)
+        p->state = RUNNING;
+        if (t->state != THREAD_JOINED)
+          t->state = THREAD_RUNNABLE;
+      }
+    }
+    p->current_thread = 0;
+
+    // restore the main thread trapframe to the process
+    if (proc_exited == 0) {
+      *(p->trapframe) = proc_trapframe;
+      if (thread_exited) {
+        // printf("restoring the process when thread is exited\n");
+        // printf("p->epc = %ld\n", p->trapframe->epc);
+      }
+
+      p->state = RUNNABLE;
+    }
+
+    // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    c->proc = 0;
+    found = 1;
+
+    release(&p->lock);
   }
 }
 
@@ -639,8 +774,10 @@ sched(void)
 
   if(!holding(&p->lock))
     panic("sched p->lock");
-  if(mycpu()->noff != 1)
+  if(mycpu()->noff != 1) {
+    printf("noff = %d\n", mycpu()->noff);
     panic("sched locks");
+  }
   if(p->state == RUNNING)
     panic("sched running");
   if(intr_get())
