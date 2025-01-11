@@ -123,6 +123,8 @@ struct proc {
   struct thread *current_thread;
   struct thread proc_thread;
   int thread_count;
+
+  struct cpu_usage usage;
 };
 
 struct proc_info {
