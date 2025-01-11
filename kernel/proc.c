@@ -185,7 +185,15 @@ found:
     t->trapframe = 0;
   }
 
-    return p;
+  p->usage.sum = 0;
+  acquire(&tickslock);
+  p->usage.start = ticks;
+  release(&tickslock);
+  
+  // set quota to infinity = the proc can live forever
+  p->usage.quota = (uint)-1;
+
+  return p;
 }
 
 // free a proc structure and the data hanging from it,
