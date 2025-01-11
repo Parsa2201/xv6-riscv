@@ -41,3 +41,4 @@ entry("report_traps");
 entry("load_traps");
 entry("create_thread");
 entry("join_thread");
+entry("cpu_usage");

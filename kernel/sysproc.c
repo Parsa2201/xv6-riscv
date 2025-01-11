@@ -137,3 +137,9 @@ sys_join_thread(void)
   argaddr(0, (uint64 *)&thread_id);
   return join_thread(thread_id);
 }
+
+uint64
+sys_cpu_usage(void)
+{
+  return cpu_usage();
+}

@@ -1245,3 +1245,14 @@ uint current_tick()
   release(&ticks);
   return now;
 }
+
+uint cpu_usage()
+{
+  struct proc *p = myproc();
+
+  acquire(&p->lock);
+  uint sum = p->usage.sum;
+  release(&p->lock);
+
+  return sum;
+}

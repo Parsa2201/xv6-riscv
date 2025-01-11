@@ -125,6 +125,7 @@ int             join_thread(uint);
 void            thread_exit_caller(void);
 void            thread_exit(int, int);
 uint            current_tick();
+uint            cpu_usage();
 
 // swtch.S
 void            swtch(struct context*, struct context*);

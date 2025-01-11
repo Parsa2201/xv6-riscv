@@ -25,3 +25,4 @@
 #define SYS_load_traps 24
 #define SYS_create_thread 25
 #define SYS_join_thread 26
+#define SYS_cpu_usage 27

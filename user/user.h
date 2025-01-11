@@ -31,6 +31,7 @@ int report_traps(struct report_traps *);
 int load_traps(void);
 int create_thread(uint *, void *(*)(void *arg), void *, void *, uint64);
 int join_thread(uint);
+uint cpu_usage();
 
 // ulib.c
 int stat(const char*, struct stat*);
