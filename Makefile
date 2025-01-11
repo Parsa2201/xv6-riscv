@@ -142,6 +142,7 @@ UPROGS=\
 	$U/_parsa\
 	$U/_crash_maker\
 	$U/_hithread\
+	$U/_usage\
 
 fs.img: mkfs/mkfs README.md $(UPROGS)
 	mkfs/mkfs fs.img README.md $(UPROGS)
