@@ -185,6 +185,7 @@ found:
     t->trapframe = 0;
   }
 
+  // init proc usage
   p->usage.sum = 0;
   acquire(&tickslock);
   p->usage.start = ticks;
@@ -533,8 +534,12 @@ scheduler(void)
         if (p->proc_thread.state != THREAD_JOINED) {
           p->proc_thread.state = THREAD_RUNNING;
           p->current_thread = &p->proc_thread;
+          uint start = current_tick();
           swtch(&c->context, &p->context);
-          if (p->state == ZOMBIE || p->state == UNUSED) {
+          uint end = current_tick();
+          p->usage.sum += end - start;
+          if (p->state == ZOMBIE || p->state == UNUSED)
+          {
             p->current_thread = 0;
             c->proc = 0;
             found = 1;
@@ -563,9 +568,10 @@ scheduler(void)
 
             // change the process trapframe with current thread trapframe
             *(p->trapframe) = *(t->trapframe);
-            // printf("p->a0 (1) = %ld\n", p->trapframe->a0);
+            uint start = current_tick();
             swtch(&c->context, &p->context);
-            // printf("p->a0 (2) = %ld\n", p->trapframe->a0);
+            uint end = current_tick();
+            p->usage.sum += end - start;
 
             // check if the process has exited
             if (p->state == ZOMBIE || p->state == UNUSED) {
@@ -1229,4 +1235,13 @@ void thread_exit(int should_acquire, int should_sched)
     yield();
     usertrapret();
   }
+}
+
+uint current_tick()
+{
+  uint now;
+  acquire(&ticks);
+  now = ticks;
+  release(&ticks);
+  return now;
 }

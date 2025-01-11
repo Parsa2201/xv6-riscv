@@ -124,6 +124,7 @@ int             create_thread(uint *, void *(*)(void *arg), void *, void *, uint
 int             join_thread(uint);
 void            thread_exit_caller(void);
 void            thread_exit(int, int);
+uint            current_tick();
 
 // swtch.S
 void            swtch(struct context*, struct context*);
