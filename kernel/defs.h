@@ -4,6 +4,7 @@ struct file;
 struct inode;
 struct pipe;
 struct proc;
+struct lowpri_proc;
 struct spinlock;
 struct sleeplock;
 struct stat;
@@ -129,6 +130,7 @@ void            thread_exit_caller(void);
 void            thread_exit(int, int);
 uint            current_tick();
 uint            cpu_usage();
+int             top(struct top *);
 
 // swtch.S
 void            swtch(struct context*, struct context*);

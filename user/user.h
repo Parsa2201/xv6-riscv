@@ -3,6 +3,8 @@ struct proc_info;
 struct child_processes;
 struct report;
 struct report_traps;
+struct top_proc_info;
+struct top;
 
 // system calls
 int fork(void);
@@ -32,6 +34,7 @@ int load_traps(void);
 int create_thread(uint *, void *(*)(void *arg), void *, void *, uint64);
 int join_thread(uint);
 uint cpu_usage();
+int top(struct top *);
 
 // ulib.c
 int stat(const char*, struct stat*);
@@ -51,3 +54,26 @@ void *memcpy(void *, const void *, uint);
 // umalloc.c
 void* malloc(uint);
 void free(void*);
+
+#define NPROC 64
+struct cpu_usage {
+  uint sum;
+  uint start;
+  uint quota;
+  uint last_tick;
+};
+
+enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+
+struct top_proc_info {
+  char name[16];
+  int pid;
+  int ppid;
+  enum procstate state;
+  struct cpu_usage usage;
+};
+
+struct top {
+  int count;
+  struct top_proc_info procs[NPROC];
+};

@@ -143,3 +143,11 @@ sys_cpu_usage(void)
 {
   return cpu_usage();
 }
+
+uint64
+sys_top(void)
+{
+  struct top *tp;
+  argaddr(0, (uint64 *)&tp);
+  return top(tp);
+}

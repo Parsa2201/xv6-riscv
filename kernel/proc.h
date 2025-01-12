@@ -86,6 +86,11 @@ enum threadstate {
   THREAD_JOINED,
 };
 
+enum pri {
+  HIGH_PRIORITY,
+  LOW_PRIORITY
+};
+
 struct thread {
   enum threadstate state;
   struct trapframe *trapframe;
@@ -132,9 +137,17 @@ struct proc {
   int thread_count;
 
   struct cpu_usage usage;
+  enum pri priority;              // 0 means it's high priority and 1 means it's low priority
 };
 
-struct proc_info {
+struct lowpri_proc {
+  struct proc *p;
+  struct spinlock lock;
+  int used;                       // 1 if used, 0 if not
+};
+
+struct proc_info
+{
   char name[16];
   int pid;
   int ppid;

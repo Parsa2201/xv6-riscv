@@ -3,9 +3,9 @@
 #include "user/user.h"
 #include "kernel/fcntl.h"
 
-#define NPROC        64  // maximum number of processes
+// #define NPROC        64  // maximum number of processes
 
-enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+// enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 struct proc_info {
   char name[16];

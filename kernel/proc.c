@@ -7,10 +7,12 @@
 #include "defs.h"
 #include "fcntl.h"
 #include "fs.h"
+#include "sort.h"
 
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
+struct lowpri_proc lowpri_proc[NPROC];
 
 struct proc *initproc;
 
@@ -62,7 +64,8 @@ void
 procinit(void)
 {
   struct proc *p;
-  
+  struct lowpri_proc *low;
+
   initlock(&pid_lock, "nextpid");
   initlock(&thrid_lock, "nextthrid");
   initlock(&wait_lock, "wait_lock");
@@ -70,6 +73,11 @@ procinit(void)
       initlock(&p->lock, "proc");
       p->state = UNUSED;
       p->kstack = KSTACK((int) (p - proc));
+  }
+  for (low = lowpri_proc; low < &lowpri_proc[NPROC]; low++) {
+    initlock(&low->lock, "low_proc");
+    low->p = 0;
+    low->used = 0;
   }
 }
 
@@ -192,6 +200,8 @@ found:
 
   // set quota to infinity = the proc can live forever
   p->usage.quota = (uint)-1;
+
+  p->priority = HIGH_PRIORITY;
 
   return p;
 }
@@ -501,6 +511,96 @@ wait(uint64 addr)
   }
 }
 
+// runs the process and its threads for one cycle
+// p->lock should be acquired before calling it
+void
+run_proc(struct cpu *c, struct proc *p)
+{
+  // Switch to chosen process.  It is the process's job
+  // to release its lock and then reacquire it
+  // before jumping back to us.
+  p->state = RUNNING;
+  c->proc = p;
+  if (p->proc_thread.state != THREAD_JOINED) {
+    p->proc_thread.state = THREAD_RUNNING;
+    p->current_thread = &p->proc_thread;
+
+    uint start = ticks;
+    p->usage.last_tick = start;
+    swtch(&c->context, &p->context);
+    uint end = ticks;
+    p->usage.sum += end - start;
+    p->usage.last_tick = end;
+
+    if (p->state == ZOMBIE || p->state == UNUSED)
+    {
+      p->current_thread = 0;
+      goto stop;
+    }
+  }
+
+  struct trapframe proc_trapframe = *(p->trapframe);
+  int proc_exited = 0;
+  int thread_exited = 0;
+
+  if (p->thread_count > 0) {
+    for (struct thread *t = p->threads; t < &p->threads[MAX_THREAD]; t++)
+    {
+      if (t->state != THREAD_RUNNABLE || t->state == THREAD_JOINED)
+        continue;
+      if (p->state == ZOMBIE || p->state == UNUSED) {
+        proc_exited = 1;
+        break;
+      }
+
+      p->state = RUNNING;
+      t->state = THREAD_RUNNING;
+      p->current_thread = t;
+
+      // change the process trapframe with current thread trapframe
+      *(p->trapframe) = *(t->trapframe);
+      uint start = ticks;
+      swtch(&c->context, &p->context);
+      uint end = ticks;
+      p->usage.sum += end - start;
+
+      // check if the process has exited
+      if (p->state == ZOMBIE || p->state == UNUSED) {
+        proc_exited = 1;
+        break;
+      }
+      if (t->state == THREAD_FREE) {
+        thread_exited = 1;
+        break;
+      }
+
+      // update the trapframe of the current thread
+      *(t->trapframe) = *(p->trapframe);
+      // TODO: check for joined thread and process (main thread)
+      p->state = RUNNING;
+      if (t->state != THREAD_JOINED)
+        t->state = THREAD_RUNNABLE;
+    }
+  }
+  p->current_thread = 0;
+
+  // restore the main thread trapframe to the process
+  if (proc_exited == 0) {
+    *(p->trapframe) = proc_trapframe;
+    if (thread_exited) {
+      // printf("restoring the process when thread is exited\n");
+      // printf("p->epc = %ld\n", p->trapframe->epc);
+    }
+
+    p->state = RUNNABLE;
+  }
+
+  stop:
+  // Process is done running for now.
+  // It should have changed its p->state before coming back.
+  c->proc = 0;
+}
+
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -525,91 +625,7 @@ scheduler2(void)
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        if (p->proc_thread.state != THREAD_JOINED) {
-          p->proc_thread.state = THREAD_RUNNING;
-          p->current_thread = &p->proc_thread;
-
-          uint start = ticks;
-          p->usage.last_tick = start;
-          swtch(&c->context, &p->context);
-          uint end = ticks;
-          p->usage.sum += end - start;
-          p->usage.last_tick = end;
-
-          if (p->state == ZOMBIE || p->state == UNUSED)
-          {
-            p->current_thread = 0;
-            c->proc = 0;
-            found = 1;
-            release(&p->lock);
-            continue;
-          }
-        }
-
-        struct trapframe proc_trapframe = *(p->trapframe);
-        int proc_exited = 0;
-        int thread_exited = 0;
-
-        if (p->thread_count > 0) {
-          for (struct thread *t = p->threads; t < &p->threads[MAX_THREAD]; t++)
-          {
-            if (t->state != THREAD_RUNNABLE || t->state == THREAD_JOINED)
-              continue;
-            if (p->state == ZOMBIE || p->state == UNUSED) {
-              proc_exited = 1;
-              break;
-            }
-
-            p->state = RUNNING;
-            t->state = THREAD_RUNNING;
-            p->current_thread = t;
-
-            // change the process trapframe with current thread trapframe
-            *(p->trapframe) = *(t->trapframe);
-            uint start = ticks;
-            swtch(&c->context, &p->context);
-            uint end = ticks;
-            p->usage.sum += end - start;
-
-            // check if the process has exited
-            if (p->state == ZOMBIE || p->state == UNUSED) {
-              proc_exited = 1;
-              break;
-            }
-            if (t->state == THREAD_FREE) {
-              thread_exited = 1;
-              break;
-            }
-
-            // update the trapframe of the current thread
-            *(t->trapframe) = *(p->trapframe);
-            // TODO: check for joined thread and process (main thread)
-            p->state = RUNNING;
-            if (t->state != THREAD_JOINED)
-              t->state = THREAD_RUNNABLE;
-          }
-        }
-        p->current_thread = 0;
-
-        // restore the main thread trapframe to the process
-        if (proc_exited == 0) {
-          *(p->trapframe) = proc_trapframe;
-          if (thread_exited) {
-            // printf("restoring the process when thread is exited\n");
-            // printf("p->epc = %ld\n", p->trapframe->epc);
-          }
-
-          p->state = RUNNABLE;
-        }
-
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
+        run_proc(c, p);
         found = 1;
       }
 
@@ -623,7 +639,67 @@ scheduler2(void)
   }
 }
 
-void scheduler(void)
+// changes the priority of the process using some factors.
+// the process lock should NOT be acquired
+// otherwise it may cause deadlock
+enum pri
+adjpri(struct proc *p, uint quota, uint sum, enum pri priority)
+{
+  // if (p->state == UNUSED)
+  //   return;
+  if (quota == -1)
+  {
+    // check if the process is in the low priority queue
+    // if yes, remove it from the queue
+    if (priority == LOW_PRIORITY) {
+      for (struct lowpri_proc *low = lowpri_proc; low < &lowpri_proc[NPROC]; low++)
+      {
+        acquire(&low->lock);
+        if (low->used == 1 && low->p == p)
+        {
+          low->used = 0;
+          release(&low->lock);
+          break;
+        }
+        release(&low->lock);
+      }
+    }
+    // change it's priority
+    return HIGH_PRIORITY;
+  }
+  else if (sum > quota) {
+    // check if the process is not in the low priority queue
+    // if yes, add it to the queue
+    if (priority == HIGH_PRIORITY)
+      for (struct lowpri_proc *low = lowpri_proc; low < &lowpri_proc[NPROC]; low++) {
+        acquire(&low->lock);
+        if (low->used == 0) {
+          low->used = 1;
+          low->p = p;
+          release(&low->lock);
+          break;
+        }
+        release(&low->lock);
+      }
+    
+    // change it's priority
+    return LOW_PRIORITY;
+  }
+  return priority;
+}
+
+// Per-CPU process scheduler.
+// Each CPU calls scheduler() after setting itself up.
+// Scheduler never returns.  It loops, doing:
+//  - choose a process to run.
+//  - swtch to start running that process.
+//  - eventually that process transfers control
+//    via swtch back to the scheduler.
+//
+// Note: this scheduler runs the processes with
+// lowest cpu usage and highest priority
+void 
+scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
@@ -640,121 +716,72 @@ void scheduler(void)
 
     for(struct proc *pp = proc; pp < &proc[NPROC]; pp++) {
       acquire(&pp->lock);
-      if(pp->state == RUNNABLE) {
+      uint quota = pp->usage.quota;
+      uint ppsum = pp->usage.sum;
+      enum pri priority = pp->priority;
+      release(&pp->lock);
+
+      priority = adjpri(pp, quota, ppsum, priority);
+
+      acquire(&pp->lock);
+      pp->priority = priority;
+      if (pp->state == RUNNABLE && pp->priority == HIGH_PRIORITY)
+      {
         if (found == 0) {
           p = pp;
           sum = pp->usage.sum;
           found = 1;
+          continue;
         } else if (pp->usage.sum < sum) {
           release(&p->lock);
           p = pp;
           sum = pp->usage.sum;
-        } else {
-          release(&pp->lock);
+          continue;
         }
-      } else {
+      }
+      release(&pp->lock);
+    }
+    if (found)
+      goto found;
+
+    for (struct lowpri_proc *low = lowpri_proc; low < &lowpri_proc[NPROC]; low++) {
+      acquire(&low->lock);
+      if (low->used == 1) {
+        struct proc *pp = low->p;
+        acquire(&pp->lock);
+        if (pp->state == RUNNABLE)
+        {
+          if (found == 0) {
+            p = pp;
+            sum = pp->usage.sum;
+            found = 1;
+            release(&low->lock);
+            continue;
+          } else if (pp->usage.sum < sum) {
+            release(&p->lock);
+            p = pp;
+            sum = pp->usage.sum;
+            release(&low->lock);
+            continue;
+          }
+        }
         release(&pp->lock);
       }
+      release(&low->lock);
     }
+    if (found)
+      goto found;
 
-    if(found == 0) {
-      // nothing to run; stop running on this core until an interrupt.
-      intr_on();
-      asm volatile("wfi");
-      continue;
-    }
+    // nothing to run; stop running on this core until an interrupt.
+    intr_on();
+    asm volatile("wfi");
+    continue;
 
-    // found
+    found:
     // p->lock is already acquired and
     // should be released after done with it.
-    
-    // Switch to chosen process.  It is the process's job
-    // to release its lock and then reacquire it
-    // before jumping back to us.
-    p->state = RUNNING;
-    c->proc = p;
-    if (p->proc_thread.state != THREAD_JOINED) {
-      p->proc_thread.state = THREAD_RUNNING;
-      p->current_thread = &p->proc_thread;
-
-      uint start = ticks;
-      p->usage.last_tick = start;
-      swtch(&c->context, &p->context);
-      uint end = ticks;
-      p->usage.sum += end - start;
-      p->usage.last_tick = end;
-
-      if (p->state == ZOMBIE || p->state == UNUSED)
-      {
-        p->current_thread = 0;
-        c->proc = 0;
-        found = 1;
-        release(&p->lock);
-        continue;
-      }
-    }
-
-    struct trapframe proc_trapframe = *(p->trapframe);
-    int proc_exited = 0;
-    int thread_exited = 0;
-
-    if (p->thread_count > 0) {
-      for (struct thread *t = p->threads; t < &p->threads[MAX_THREAD]; t++)
-      {
-        if (t->state != THREAD_RUNNABLE || t->state == THREAD_JOINED)
-          continue;
-        if (p->state == ZOMBIE || p->state == UNUSED) {
-          proc_exited = 1;
-          break;
-        }
-
-        p->state = RUNNING;
-        t->state = THREAD_RUNNING;
-        p->current_thread = t;
-
-        // change the process trapframe with current thread trapframe
-        *(p->trapframe) = *(t->trapframe);
-        uint start = ticks;
-        swtch(&c->context, &p->context);
-        uint end = ticks;
-        p->usage.sum += end - start;
-
-        // check if the process has exited
-        if (p->state == ZOMBIE || p->state == UNUSED) {
-          proc_exited = 1;
-          break;
-        }
-        if (t->state == THREAD_FREE) {
-          thread_exited = 1;
-          break;
-        }
-
-        // update the trapframe of the current thread
-        *(t->trapframe) = *(p->trapframe);
-        // TODO: check for joined thread and process (main thread)
-        p->state = RUNNING;
-        if (t->state != THREAD_JOINED)
-          t->state = THREAD_RUNNABLE;
-      }
-    }
-    p->current_thread = 0;
-
-    // restore the main thread trapframe to the process
-    if (proc_exited == 0) {
-      *(p->trapframe) = proc_trapframe;
-      if (thread_exited) {
-        // printf("restoring the process when thread is exited\n");
-        // printf("p->epc = %ld\n", p->trapframe->epc);
-      }
-
-      p->state = RUNNABLE;
-    }
-
-    // Process is done running for now.
-    // It should have changed its p->state before coming back.
-    c->proc = 0;
+    run_proc(c, p);
     found = 1;
-
     release(&p->lock);
   }
 }
@@ -1190,7 +1217,7 @@ allocthrid()
 // Creates a new thread for the current process.
 // Returns the thread id in thread_id if the thread creation
 // is successful. Gets the start function (function) and it's argument (arg)
-// as the arguments. It also needs an allocated memmory (user space) for the
+// as the arguments. It also needs an allocated memory (user space) for the
 // thread stack, and also it's size (in bytes).
 // # Args
 // - `uint *thread_id`: The id of the created thread
@@ -1389,4 +1416,59 @@ uint cpu_usage()
   release(&p->lock);
 
   return sum;
+}
+
+int
+top_cmp(void *v1, void *v2)
+{
+  struct top_proc_info *inf1 = (struct top_proc_info *)v1;
+  struct top_proc_info *inf2 = (struct top_proc_info *)v2;
+
+  if (inf1->usage.sum > inf2->usage.sum)
+    return 1;
+  if (inf1->usage.sum > inf2->usage.sum)
+    return -1;
+  return 0;
+}
+
+int
+top(struct top *tp)
+{
+  struct top k_tp;
+  k_tp.count = 0;
+
+  for (struct proc *p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if (p->state != UNUSED) {
+      // the first free entry
+      struct top_proc_info *inf = &k_tp.procs[k_tp.count];
+
+      // fill in the infos
+      strncpy(inf->name, p->name, 16);
+      inf->pid = p->pid;
+
+      if (p != initproc) {
+      struct proc *pp = p->parent;
+      inf->ppid = pp->pid;
+      } else {
+        inf->ppid = 0;
+      }
+
+      inf->state = p->state;
+      inf->usage = p->usage;
+
+      k_tp.count++;
+    }
+    release(&p->lock);
+  }
+
+  qsort(k_tp.procs, sizeof(struct top_proc_info), 0, k_tp.count - 1, top_cmp);
+
+  struct proc *p = myproc();
+
+  int result;
+  result = copyout(p->pagetable, (uint64)&tp->count, (char *)&k_tp.count, sizeof(k_tp.count));
+  if (result == -1)
+    return -1;
+  return copyout(p->pagetable, (uint64)&tp->procs, (char *)&k_tp.procs, sizeof(struct top_proc_info) * k_tp.count);
 }
