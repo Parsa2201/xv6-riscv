@@ -70,13 +70,36 @@ state_to_str(enum procstate s)
   return "unkown";
 }
 
-int
-main(int argc, char *argv[])
+void 
+print_top(struct top *t)
+{
+  printf("number of processes: %d\n", t->count);
+  my_print_str("PID", 10);
+  my_print_str("PPID", 10);
+  my_print_str("STATE", 16);
+  my_print_str("NAME", 16);
+  my_print_str("START", 10);
+  my_print_str("USAGE", 10);
+  printf("\n");
+
+  for (struct top_proc_info *inf = t->procs; inf < &t->procs[t->count]; inf++) {
+    my_print_int(inf->pid, 10);
+    my_print_int(inf->ppid, 10);
+    my_print_str(state_to_str(inf->state), 16);
+    my_print_str(inf->name, 16);
+    my_print_int(inf->usage.start, 10);
+    my_print_int(inf->usage.sum, 10);
+    printf("\n");
+  }
+}
+
+void
+test1()
 {
   int pid = getpid();
   if (set_cpu_quota(pid, 5) < 0) {
     printf("error setting the quota\n");
-    return 0;
+    return;
   }
 
   printf("Hello World!\n");
@@ -90,25 +113,21 @@ main(int argc, char *argv[])
   int r;
   if ((r = top(&t)) < 0) {
     printf("There was a problem making the top syscall.\n");
-    return 0;
+    return;
   }
-  
-  printf("number of processes: %d\n", t.count);
-  my_print_str("PID", 10);
-  my_print_str("PPID", 10);
-  my_print_str("STATE", 16);
-  my_print_str("NAME", 16);
-  my_print_str("START", 10);
-  my_print_str("USAGE", 10);
-  printf("\n");
 
-  for (struct top_proc_info *inf = t.procs; inf < &t.procs[t.count]; inf++) {
-    my_print_int(inf->pid, 10);
-    my_print_int(inf->ppid, 10);
-    my_print_str(state_to_str(inf->state), 16);
-    my_print_str(inf->name, 16);
-    my_print_int(inf->usage.start, 10);
-    my_print_int(inf->usage.sum, 10);
-    printf("\n");
-  }
+  print_top(&t);
+}
+
+void
+test2()
+{
+
+}
+
+int
+main(int argc, char *argv[])
+{
+  test2();
+  return 0;
 }
