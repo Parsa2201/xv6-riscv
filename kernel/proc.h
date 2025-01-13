@@ -140,11 +140,11 @@ struct proc {
   enum pri priority;              // 0 means it's high priority and 1 means it's low priority
 };
 
-struct lowpri_proc {
-  struct proc *p;
-  struct spinlock lock;
-  int used;                       // 1 if used, 0 if not
-};
+// struct pri_proc {
+//   struct proc *p;
+//   struct spinlock lock;
+//   int used;                       // 1 if used, 0 if not
+// };
 
 struct proc_info
 {

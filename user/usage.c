@@ -73,9 +73,15 @@ state_to_str(enum procstate s)
 int
 main(int argc, char *argv[])
 {
+  int pid = getpid();
+  if (set_cpu_quota(pid, 5) < 0) {
+    printf("error setting the quota\n");
+    return 0;
+  }
+
   printf("Hello World!\n");
   int a = 0;
-  for (long long i = 0; i < 1000000000; i++)
+  for (long long i = 0; i < 10000000000; i++)
     a += 2;
   uint usage = cpu_usage();
   printf("my usage is %d\n", usage);

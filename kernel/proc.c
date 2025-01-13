@@ -12,7 +12,9 @@
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
-struct lowpri_proc lowpri_proc[NPROC];
+// struct pri_proc lowpri_proc[NPROC];
+// struct pri_proc highpri_proc[NPROC];
+// struct spinlock dir_lock;
 
 struct proc *initproc;
 
@@ -64,7 +66,8 @@ void
 procinit(void)
 {
   struct proc *p;
-  struct lowpri_proc *low;
+  // struct pri_proc *low;
+  // struct pri_proc *high;
 
   initlock(&pid_lock, "nextpid");
   initlock(&thrid_lock, "nextthrid");
@@ -74,11 +77,16 @@ procinit(void)
       p->state = UNUSED;
       p->kstack = KSTACK((int) (p - proc));
   }
-  for (low = lowpri_proc; low < &lowpri_proc[NPROC]; low++) {
-    initlock(&low->lock, "low_proc");
-    low->p = 0;
-    low->used = 0;
-  }
+  // for (low = lowpri_proc; low < &lowpri_proc[NPROC]; low++) {
+  //   initlock(&low->lock, "low_proc");
+  //   low->p = 0;
+  //   low->used = 0;
+  // }
+  // for (high = highpri_proc; high < &highpri_proc[NPROC]; high++) {
+  //   initlock(&high->lock, "high_proc");
+  //   high->p = 0;
+  //   high->used = 0;
+  // }
 }
 
 // Must be called with interrupts disabled,
@@ -142,6 +150,7 @@ static struct proc*
 allocproc(void)
 {
   struct proc *p;
+  // struct pri_proc *high;
 
   for(p = proc; p < &proc[NPROC]; p++) {
     acquire(&p->lock);
@@ -202,6 +211,18 @@ found:
   p->usage.quota = (uint)-1;
 
   p->priority = HIGH_PRIORITY;
+
+  // for (high = highpri_proc; high < &highpri_proc[NPROC]; high++) {
+  //   acquire(&high->lock);
+  //   if(high->used == 0) {
+  //     high->p = p;
+  //     high->used = 1;
+  //   }
+  //   else
+  //   {
+  //     release(&high->lock);
+  //   }
+  // }
 
   return p;
 }
@@ -640,52 +661,94 @@ scheduler2(void)
 }
 
 // changes the priority of the process using some factors.
-// the process lock should NOT be acquired
-// otherwise it may cause deadlock
+// the process lock should be acquired
+// for deadlock prevention, 
 enum pri
-adjpri(struct proc *p, uint quota, uint sum, enum pri priority)
+adjpri(struct proc *p)
 {
+  uint quota = p->usage.quota;
+  uint sum = p->usage.sum;
+  enum pri priority = p->priority;
   // if (p->state == UNUSED)
   //   return;
   if (quota == -1)
   {
     // check if the process is in the low priority queue
     // if yes, remove it from the queue
-    if (priority == LOW_PRIORITY) {
-      for (struct lowpri_proc *low = lowpri_proc; low < &lowpri_proc[NPROC]; low++)
-      {
-        acquire(&low->lock);
-        if (low->used == 1 && low->p == p)
-        {
-          low->used = 0;
-          release(&low->lock);
-          break;
-        }
-        release(&low->lock);
-      }
-    }
+    // if (priority == LOW_PRIORITY) {
+    //   for (struct pri_proc *low = lowpri_proc; low < &lowpri_proc[NPROC]; low++)
+    //   {
+    //     // printf("acquiring low->lock [adjpri]\n");
+    //     acquire(&low->lock);
+    //     if (low->used == 1 && low->p == p)
+    //     {
+    //       low->used = 0;
+    //       release(&low->lock);
+    //       break;
+    //     }
+    //     release(&low->lock);
+    //   }
+    // }
     // change it's priority
     return HIGH_PRIORITY;
   }
   else if (sum > quota) {
     // check if the process is not in the low priority queue
     // if yes, add it to the queue
-    if (priority == HIGH_PRIORITY)
-      for (struct lowpri_proc *low = lowpri_proc; low < &lowpri_proc[NPROC]; low++) {
-        acquire(&low->lock);
-        if (low->used == 0) {
-          low->used = 1;
-          low->p = p;
-          release(&low->lock);
-          break;
-        }
-        release(&low->lock);
-      }
+    // if (priority == HIGH_PRIORITY)
+    //   for (struct pri_proc *low = lowpri_proc; low < &lowpri_proc[NPROC]; low++) {
+    //     // printf("acquiring low->lock [adjpri]\n");
+    //     acquire(&low->lock);
+    //     if (low->used == 0) {
+    //       low->used = 1;
+    //       low->p = p;
+    //       release(&low->lock);
+    //       break;
+    //     }
+    //     release(&low->lock);
+    //   }
     
     // change it's priority
     return LOW_PRIORITY;
   }
   return priority;
+}
+
+int
+find_next_sched_proc(struct proc **p_ptr, enum pri queue)
+{
+  struct proc *p = 0;
+  int found = 0;
+  uint sum;
+
+  for (struct proc *pp = proc; pp < &proc[NPROC]; pp++)
+  {
+    // printf("acquiring pp->lock [high priority]\n");
+    acquire(&pp->lock);
+    pp->priority = adjpri(pp);
+
+    if (pp->state == RUNNABLE && pp->priority == queue)
+    {
+      if (found == 0)
+      {
+        p = pp;
+        sum = pp->usage.sum;
+        found = 1;
+        continue;
+      }
+      else if (pp->usage.sum < sum)
+      {
+        release(&p->lock);
+        p = pp;
+        sum = pp->usage.sum;
+        continue;
+      }
+    }
+    release(&pp->lock);
+  }
+
+  *p_ptr = p;
+  return found;
 }
 
 // Per-CPU process scheduler.
@@ -701,7 +764,7 @@ adjpri(struct proc *p, uint quota, uint sum, enum pri priority)
 void 
 scheduler(void)
 {
-  struct proc *p;
+  struct proc *p = 0;
   struct cpu *c = mycpu();
 
   c->proc = 0;
@@ -711,65 +774,9 @@ scheduler(void)
     // processes are waiting.
     intr_on();
 
-    int found = 0;
-    uint sum;
-
-    for(struct proc *pp = proc; pp < &proc[NPROC]; pp++) {
-      acquire(&pp->lock);
-      uint quota = pp->usage.quota;
-      uint ppsum = pp->usage.sum;
-      enum pri priority = pp->priority;
-      release(&pp->lock);
-
-      priority = adjpri(pp, quota, ppsum, priority);
-
-      acquire(&pp->lock);
-      pp->priority = priority;
-      if (pp->state == RUNNABLE && pp->priority == HIGH_PRIORITY)
-      {
-        if (found == 0) {
-          p = pp;
-          sum = pp->usage.sum;
-          found = 1;
-          continue;
-        } else if (pp->usage.sum < sum) {
-          release(&p->lock);
-          p = pp;
-          sum = pp->usage.sum;
-          continue;
-        }
-      }
-      release(&pp->lock);
-    }
-    if (found)
+    if (find_next_sched_proc(&p, HIGH_PRIORITY))
       goto found;
-
-    for (struct lowpri_proc *low = lowpri_proc; low < &lowpri_proc[NPROC]; low++) {
-      acquire(&low->lock);
-      if (low->used == 1) {
-        struct proc *pp = low->p;
-        acquire(&pp->lock);
-        if (pp->state == RUNNABLE)
-        {
-          if (found == 0) {
-            p = pp;
-            sum = pp->usage.sum;
-            found = 1;
-            release(&low->lock);
-            continue;
-          } else if (pp->usage.sum < sum) {
-            release(&p->lock);
-            p = pp;
-            sum = pp->usage.sum;
-            release(&low->lock);
-            continue;
-          }
-        }
-        release(&pp->lock);
-      }
-      release(&low->lock);
-    }
-    if (found)
+    if (find_next_sched_proc(&p, LOW_PRIORITY))
       goto found;
 
     // nothing to run; stop running on this core until an interrupt.
@@ -781,7 +788,6 @@ scheduler(void)
     // p->lock is already acquired and
     // should be released after done with it.
     run_proc(c, p);
-    found = 1;
     release(&p->lock);
   }
 }
@@ -1471,4 +1477,37 @@ top(struct top *tp)
   if (result == -1)
     return -1;
   return copyout(p->pagetable, (uint64)&tp->procs, (char *)&k_tp.procs, sizeof(struct top_proc_info) * k_tp.count);
+}
+
+int
+set_cpu_quota(int pid, int quota)
+{
+  struct proc *this_proc = myproc();
+  struct proc *p;
+  for (p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if (p->pid == pid)
+      goto found;
+    release(&p->lock);
+  }
+  printf("pid %d not found\n", pid);
+  release(&p->lock);
+  return -1;
+
+found:
+  // ensure that the given pid in this process 
+  // or a grandchild of this process.
+  struct proc *pp = p;
+  while (pp != this_proc && pp != 0)
+    pp = p->parent;
+  if (pp == 0) {
+    printf("pid %d not a grandchild of %d\n", pid, this_proc->pid);
+    release(&p->lock);
+    return -1;
+  }
+
+  // change the quota
+  p->usage.quota = quota;
+  release(&p->lock);
+  return 0;
 }
