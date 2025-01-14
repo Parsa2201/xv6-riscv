@@ -206,6 +206,7 @@ found:
   p->usage.sum = 0;
   p->usage.start = ticks;
   p->usage.last_tick = ticks;
+  p->usage.deadline = (uint)-1;
 
   // set quota to infinity = the proc can live forever
   p->usage.quota = (uint)-1;
@@ -537,6 +538,8 @@ wait(uint64 addr)
 void
 run_proc(struct cpu *c, struct proc *p)
 {
+  if (p->state != RUNNABLE)
+    return;
   // Switch to chosen process.  It is the process's job
   // to release its lock and then reacquire it
   // before jumping back to us.
@@ -546,12 +549,11 @@ run_proc(struct cpu *c, struct proc *p)
     p->proc_thread.state = THREAD_RUNNING;
     p->current_thread = &p->proc_thread;
 
-    uint start = ticks;
-    p->usage.last_tick = start;
+    p->usage.last_tick = ticks;
     swtch(&c->context, &p->context);
-    uint end = ticks;
-    p->usage.sum += end - start;
-    p->usage.last_tick = end;
+    if (p->state == RUNNABLE)
+      p->usage.sum += ticks - p->usage.last_tick;
+    p->usage.last_tick = ticks;
 
     if (p->state == ZOMBIE || p->state == UNUSED)
     {
@@ -580,10 +582,10 @@ run_proc(struct cpu *c, struct proc *p)
 
       // change the process trapframe with current thread trapframe
       *(p->trapframe) = *(t->trapframe);
-      uint start = ticks;
+      // uint start = ticks;
       swtch(&c->context, &p->context);
-      uint end = ticks;
-      p->usage.sum += end - start;
+      // uint end = ticks;
+      // p->usage.sum += end - start;
 
       // check if the process has exited
       if (p->state == ZOMBIE || p->state == UNUSED) {
@@ -666,48 +668,18 @@ scheduler2(void)
 enum pri
 adjpri(struct proc *p)
 {
+  if (p->state != RUNNABLE)
+    return HIGH_PRIORITY;
+
   uint quota = p->usage.quota;
   uint sum = p->usage.sum;
   enum pri priority = p->priority;
-  // if (p->state == UNUSED)
-  //   return;
-  if (quota == -1)
-  {
-    // check if the process is in the low priority queue
-    // if yes, remove it from the queue
-    // if (priority == LOW_PRIORITY) {
-    //   for (struct pri_proc *low = lowpri_proc; low < &lowpri_proc[NPROC]; low++)
-    //   {
-    //     // printf("acquiring low->lock [adjpri]\n");
-    //     acquire(&low->lock);
-    //     if (low->used == 1 && low->p == p)
-    //     {
-    //       low->used = 0;
-    //       release(&low->lock);
-    //       break;
-    //     }
-    //     release(&low->lock);
-    //   }
-    // }
+  
+  if (quota == -1) {
     // change it's priority
     return HIGH_PRIORITY;
   }
   else if (sum > quota) {
-    // check if the process is not in the low priority queue
-    // if yes, add it to the queue
-    // if (priority == HIGH_PRIORITY)
-    //   for (struct pri_proc *low = lowpri_proc; low < &lowpri_proc[NPROC]; low++) {
-    //     // printf("acquiring low->lock [adjpri]\n");
-    //     acquire(&low->lock);
-    //     if (low->used == 0) {
-    //       low->used = 1;
-    //       low->p = p;
-    //       release(&low->lock);
-    //       break;
-    //     }
-    //     release(&low->lock);
-    //   }
-    
     // change it's priority
     return LOW_PRIORITY;
   }
@@ -715,11 +687,29 @@ adjpri(struct proc *p)
 }
 
 int
+proccomp(struct proc *p1, struct proc *p2)
+{
+  if (p1->usage.sum > p2->usage.sum)
+    return 1;
+  if (p1->usage.sum < p2->usage.sum)
+    return -1;
+  
+  if (p1->usage.deadline > p2->usage.deadline)
+    return 1;
+  if (p1->usage.deadline < p2->usage.deadline)
+    return -1;
+  return 0;
+}
+
+// It finds the next process to schedule
+// Returns 1 if found, 0 if not.
+// If found, it acquires its lock.
+int
 find_next_sched_proc(struct proc **p_ptr, enum pri queue)
 {
   struct proc *p = 0;
   int found = 0;
-  uint sum;
+  // uint sum;
 
   for (struct proc *pp = proc; pp < &proc[NPROC]; pp++)
   {
@@ -732,15 +722,15 @@ find_next_sched_proc(struct proc **p_ptr, enum pri queue)
       if (found == 0)
       {
         p = pp;
-        sum = pp->usage.sum;
+        // sum = pp->usage.sum;
         found = 1;
         continue;
       }
-      else if (pp->usage.sum < sum)
+      else if (proccomp(pp, p) == -1) // (pp->usage.sum < sum)
       {
         release(&p->lock);
         p = pp;
-        sum = pp->usage.sum;
+        // sum = pp->usage.sum;
         continue;
       }
     }
@@ -787,6 +777,16 @@ scheduler(void)
     found:
     // p->lock is already acquired and
     // should be released after done with it.
+    if (p->usage.deadline != (uint)-1 && p->usage.sum  > p->usage.deadline) {
+      printf("killing pid=%d with sum=%u and deadline=%u\n", p->pid, p->usage.sum, p->usage.deadline);
+      p->killed = 1;
+      if(p->state == SLEEPING){
+        // Wake process from sleep().
+        p->state = RUNNABLE;
+      }
+    } else {
+      // printf("pid=%d has sum=%d\n", p->pid, p->usage.sum);
+    }
     run_proc(c, p);
     release(&p->lock);
   }
@@ -1432,7 +1432,7 @@ top_cmp(void *v1, void *v2)
 
   if (inf1->usage.sum > inf2->usage.sum)
     return 1;
-  if (inf1->usage.sum > inf2->usage.sum)
+  if (inf1->usage.sum < inf2->usage.sum)
     return -1;
   return 0;
 }
@@ -1462,6 +1462,7 @@ top(struct top *tp)
 
       inf->state = p->state;
       inf->usage = p->usage;
+      // inf->usage.sum += ticks - inf->usage.last_tick;
 
       k_tp.count++;
     }
@@ -1510,4 +1511,57 @@ found:
   p->usage.quota = quota;
   release(&p->lock);
   return 0;
+}
+
+// Similar to fork(), but it also sets a deadline for
+// the child process. If the child process exceeds its
+// time limit, it will automatically be terminated.
+int
+hotfork(int deadline)
+{
+  int i, pid;
+  struct proc *np;
+  struct proc *p = myproc();
+
+  // Allocate process.
+  if((np = allocproc()) == 0){
+    return -1;
+  }
+
+  // Copy user memory from parent to child.
+  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
+  np->sz = p->sz;
+
+  // copy saved user registers.
+  *(np->trapframe) = *(p->trapframe);
+
+  // Cause fork to return 0 in the child.
+  np->trapframe->a0 = 0;
+
+  // increment reference counts on open file descriptors.
+  for(i = 0; i < NOFILE; i++)
+    if(p->ofile[i])
+      np->ofile[i] = filedup(p->ofile[i]);
+  np->cwd = idup(p->cwd);
+
+  safestrcpy(np->name, p->name, sizeof(p->name));
+
+  pid = np->pid;
+
+  release(&np->lock);
+
+  acquire(&wait_lock);
+  np->parent = p;
+  release(&wait_lock);
+
+  acquire(&np->lock);
+  np->state = RUNNABLE;
+  np->usage.deadline = deadline;
+  release(&np->lock);
+
+  return pid;
 }

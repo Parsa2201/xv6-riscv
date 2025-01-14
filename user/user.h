@@ -36,6 +36,7 @@ int join_thread(uint);
 uint cpu_usage();
 int top(struct top *);
 int set_cpu_quota(int, int);
+int hotfork(int);
 
 // ulib.c
 int stat(const char*, struct stat*);
@@ -62,6 +63,7 @@ struct cpu_usage {
   uint start;
   uint quota;
   uint last_tick;
+  uint deadline;
 };
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };

@@ -110,8 +110,7 @@ test1()
   printf("my usage is %d\n", usage);
 
   struct top t = {0};
-  int r;
-  if ((r = top(&t)) < 0) {
+  if (top(&t) < 0) {
     printf("There was a problem making the top syscall.\n");
     return;
   }
@@ -120,14 +119,51 @@ test1()
 }
 
 void
+child()
+{
+  printf("hello from child!\n");
+  while (1)
+    ;
+}
+
+void
 test2()
 {
+  int pid;
+  for (int i = 0; i < 5; i++)
+  {
+    pid = hotfork(5);
+    if (pid == 0)
+      return child();
+  }
+  sleep(120);
 
+  struct top t = {0};
+  if (top(&t) < 0) {
+    printf("There was a problem making the top syscall.\n");
+    return;
+  }
+
+  print_top(&t);
+}
+
+void
+test3()
+{
+  sleep(60);
+
+  struct top t = {0};
+  if (top(&t) < 0) {
+    printf("There was a problem making the top syscall.\n");
+    return;
+  }
+
+  print_top(&t);
 }
 
 int
 main(int argc, char *argv[])
 {
-  test2();
+  test1();
   return 0;
 }

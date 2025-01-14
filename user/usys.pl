@@ -43,4 +43,5 @@ entry("create_thread");
 entry("join_thread");
 entry("cpu_usage");
 entry("top");
-entry("set_cpu_quota")
+entry("set_cpu_quota");
+entry("hotfork");

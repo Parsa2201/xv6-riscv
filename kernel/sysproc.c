@@ -160,3 +160,11 @@ sys_set_cpu_quota(void)
   argint(1, &quota);
   return set_cpu_quota(pid, quota);
 }
+
+uint64
+sys_hotfork(void)
+{
+  int deadline;
+  argint(0, &deadline);
+  return hotfork(deadline);
+}

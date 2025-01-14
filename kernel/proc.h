@@ -103,6 +103,7 @@ struct cpu_usage {
   uint start;
   uint quota;
   uint last_tick;
+  uint deadline;
 };
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };

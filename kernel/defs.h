@@ -132,6 +132,7 @@ uint            current_tick();
 uint            cpu_usage();
 int             top(struct top *);
 int             set_cpu_quota(int, int);
+int             hotfork(int);
 
 // swtch.S
 void            swtch(struct context*, struct context*);

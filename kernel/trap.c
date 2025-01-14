@@ -46,7 +46,9 @@ usertrap(void)
   w_stvec((uint64)kernelvec);
 
   struct proc *p = myproc();
-  
+  // printf("adding %u to sum\n", ticks - p->usage.last_tick);
+  // p->usage.sum += ticks - p->usage.last_tick;
+
   // save user program counter.
   p->trapframe->epc = r_sepc();
   // if (p->trapframe->ra == -1) {
@@ -76,6 +78,7 @@ usertrap(void)
     // so enable only now that we're done with those registers.
     intr_on();
 
+    p->usage.sum += ticks - p->usage.last_tick;
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
@@ -95,8 +98,11 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2) {
+    // p->usage.sum++;
+    p->usage.sum += ticks - p->usage.last_tick;
     yield();
+  }
 
   usertrapret();
 }
@@ -108,6 +114,8 @@ void
 usertrapret(void)
 {
   struct proc *p = myproc();
+  // printf("changing last_tick to %u\n", ticks);
+  p->usage.last_tick = ticks;
 
   // we're about to switch the destination of traps from
   // kerneltrap() to usertrap(), so turn off interrupts until
